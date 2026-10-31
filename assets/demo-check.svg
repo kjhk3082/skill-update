@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="911" height="606" viewBox="0 0 911 606" role="img" aria-label="skill-update check output">
+<rect width="911" height="606" rx="10" fill="#0d1117"/>
+<circle cx="22" cy="20" r="6" fill="#ff5f56"/><circle cx="42" cy="20" r="6" fill="#ffbd2e"/><circle cx="62" cy="20" r="6" fill="#27c93f"/>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13">
+<text x="24" y="52" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">$ python3 skill_update.py check</tspan></text>
+<text x="24" y="71" xml:space="preserve"><tspan fill="#ffffff" font-weight="700">skill-update 0.1.0</tspan><tspan fill="#6e7681" font-weight="400">  14 skills and plugins from 2 skill folders in 0.5s</tspan></text>
+<text x="24" y="90" xml:space="preserve"></text>
+<text x="24" y="109" xml:space="preserve"><tspan fill="#e3b341" font-weight="400">↑ Updates available (6)</tspan></text>
+<text x="24" y="128" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   color-theory             </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/design-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  +1 ~1 -0 files</tspan></text>
+<text x="24" y="147" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   frontend-design          </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/design-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  +0 ~1 -0 files</tspan></text>
+<text x="24" y="166" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   lint-fixer@acme-plugins  </tspan><tspan fill="#6e7681" font-weight="400">plugin · acme-plugins          </tspan><tspan fill="#c9d1d9" font-weight="400">  1.2.0 → 1.3.0</tspan></text>
+<text x="24" y="185" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   motion-guide             </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/design-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  +0 ~1 -0 files</tspan></text>
+<text x="24" y="204" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   pdf-tools                </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/office-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  +0 ~2 -0 files · edited locally · backed up first</tspan></text>
+<text x="24" y="223" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   review-pack              </tspan><tspan fill="#6e7681" font-weight="400">git · acme/review-pack         </tspan><tspan fill="#c9d1d9" font-weight="400">  +1 ~1 -0 files · 1 commit</tspan></text>
+<text x="24" y="242" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">      ↳ has a setup script; skill-update never runs it</tspan></text>
+<text x="24" y="261" xml:space="preserve"></text>
+<text x="24" y="280" xml:space="preserve"><tspan fill="#ff7b72" font-weight="400">! Needs your attention (1)</tspan></text>
+<text x="24" y="299" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   team-pack  </tspan><tspan fill="#6e7681" font-weight="400">git · acme/team-pack</tspan><tspan fill="#c9d1d9" font-weight="400">  </tspan></text>
+<text x="24" y="318" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">      ↳ diverged (1 local, 1 upstream commit): merge it yourself</tspan></text>
+<text x="24" y="337" xml:space="preserve"></text>
+<text x="24" y="356" xml:space="preserve"><tspan fill="#79c0ff" font-weight="400">? Cannot tell (2)</tspan></text>
+<text x="24" y="375" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   old-style  </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/old-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  </tspan></text>
+<text x="24" y="394" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">      ↳ acme/old-skills no longer contains it (removed or renamed)</tspan></text>
+<text x="24" y="413" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">   1 plugin has no catalog version; Claude Code decides (--verbose lists them)</tspan></text>
+<text x="24" y="432" xml:space="preserve"></text>
+<text x="24" y="451" xml:space="preserve"><tspan fill="#7ee787" font-weight="400">✓ Up to date (4)</tspan></text>
+<text x="24" y="470" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">   list them with --verbose</tspan></text>
+<text x="24" y="489" xml:space="preserve"></text>
+<text x="24" y="508" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">· No upstream known (1)</tspan></text>
+<text x="24" y="527" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">   list them with --verbose</tspan></text>
+<text x="24" y="546" xml:space="preserve"></text>
+<text x="24" y="565" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">Apply with:  python3 skill_update.py update    (everything is backed up first)</tspan></text>
+</g>
+</svg>

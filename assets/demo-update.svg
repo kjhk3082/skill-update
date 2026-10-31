@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="911" height="530" viewBox="0 0 911 530" role="img" aria-label="skill-update update output">
+<rect width="911" height="530" rx="10" fill="#0d1117"/>
+<circle cx="22" cy="20" r="6" fill="#ff5f56"/><circle cx="42" cy="20" r="6" fill="#ffbd2e"/><circle cx="62" cy="20" r="6" fill="#27c93f"/>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13">
+<text x="24" y="52" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">$ python3 skill_update.py update --yes</tspan></text>
+<text x="24" y="71" xml:space="preserve"><tspan fill="#ffffff" font-weight="700">Will update 7:</tspan></text>
+<text x="24" y="90" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   color-theory             </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/design-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  +1 ~1 -0 files</tspan></text>
+<text x="24" y="109" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   frontend-design          </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/design-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  +0 ~1 -0 files</tspan></text>
+<text x="24" y="128" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   lint-fixer@acme-plugins  </tspan><tspan fill="#6e7681" font-weight="400">plugin · acme-plugins          </tspan><tspan fill="#c9d1d9" font-weight="400">  1.2.0 → 1.3.0</tspan></text>
+<text x="24" y="147" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   motion-guide             </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/design-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  +0 ~1 -0 files</tspan></text>
+<text x="24" y="166" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   mystery@acme-plugins     </tspan><tspan fill="#6e7681" font-weight="400">plugin · acme-plugins          </tspan><tspan fill="#c9d1d9" font-weight="400">  Claude Code decides</tspan></text>
+<text x="24" y="185" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">      ↳ no version in the catalog; Claude Code decides during the update</tspan></text>
+<text x="24" y="204" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   pdf-tools                </tspan><tspan fill="#6e7681" font-weight="400">npx skills · acme/office-skills</tspan><tspan fill="#c9d1d9" font-weight="400">  +0 ~2 -0 files · edited locally · backed up first</tspan></text>
+<text x="24" y="223" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">   review-pack              </tspan><tspan fill="#6e7681" font-weight="400">git · acme/review-pack         </tspan><tspan fill="#c9d1d9" font-weight="400">  +1 ~1 -0 files · 1 commit</tspan></text>
+<text x="24" y="242" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">      ↳ has a setup script; skill-update never runs it</tspan></text>
+<text x="24" y="261" xml:space="preserve"></text>
+<text x="24" y="280" xml:space="preserve"><tspan fill="#7ee787" font-weight="400">✓</tspan><tspan fill="#c9d1d9" font-weight="400"> color-theory  </tspan><tspan fill="#6e7681" font-weight="400">1 folder replaced (+1 ~1 -0 files)</tspan></text>
+<text x="24" y="299" xml:space="preserve"><tspan fill="#7ee787" font-weight="400">✓</tspan><tspan fill="#c9d1d9" font-weight="400"> frontend-design  </tspan><tspan fill="#6e7681" font-weight="400">1 folder replaced (+0 ~1 -0 files)</tspan></text>
+<text x="24" y="318" xml:space="preserve"><tspan fill="#7ee787" font-weight="400">✓</tspan><tspan fill="#c9d1d9" font-weight="400"> lint-fixer@acme-plugins  </tspan><tspan fill="#6e7681" font-weight="400">1.2.0 → 1.3.0</tspan></text>
+<text x="24" y="337" xml:space="preserve"><tspan fill="#7ee787" font-weight="400">✓</tspan><tspan fill="#c9d1d9" font-weight="400"> motion-guide  </tspan><tspan fill="#6e7681" font-weight="400">1 folder replaced (+0 ~1 -0 files)</tspan></text>
+<text x="24" y="356" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">=</tspan><tspan fill="#c9d1d9" font-weight="400"> mystery@acme-plugins  </tspan><tspan fill="#6e7681" font-weight="400">already up to date</tspan></text>
+<text x="24" y="375" xml:space="preserve"><tspan fill="#7ee787" font-weight="400">✓</tspan><tspan fill="#c9d1d9" font-weight="400"> pdf-tools  </tspan><tspan fill="#6e7681" font-weight="400">1 folder replaced (+0 ~2 -0 files)</tspan></text>
+<text x="24" y="394" xml:space="preserve"><tspan fill="#7ee787" font-weight="400">✓</tspan><tspan fill="#c9d1d9" font-weight="400"> review-pack  </tspan><tspan fill="#6e7681" font-weight="400">b7a9ddd → 10150b6 (1 commit)</tspan></text>
+<text x="24" y="413" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">    ↳ has a setup script: run it yourself if its README says so</tspan></text>
+<text x="24" y="432" xml:space="preserve"></text>
+<text x="24" y="451" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">6 updated, 1 unchanged, 0 failed.</tspan></text>
+<text x="24" y="470" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">Undo with:  python3 skill_update.py rollback 20261031-104216</tspan></text>
+<text x="24" y="489" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">note: Restart Claude Code to load the updated plugins.</tspan></text>
+</g>
+</svg>

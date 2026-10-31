@@ -1,0 +1,10 @@
+{
+  "name": "skill-update",
+  "description": "Check and update every agent skill on your machine: npx skills installs, git clones and Claude Code plugins.",
+  "version": "0.1.0",
+  "author": { "name": "kjhk3082", "url": "https://github.com/kjhk3082" },
+  "homepage": "https://github.com/kjhk3082/skill-update",
+  "repository": "https://github.com/kjhk3082/skill-update",
+  "license": "MIT",
+  "keywords": ["skills", "agent-skills", "update", "claude-code", "codex", "maintenance"]
+}
