@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from .util import clean
+
 # Which channel owns an item, i.e. how the skill was installed.
 KIND_LOCK = "lock"            # installed by `npx skills` (recorded in the skills lock file)
 KIND_GIT = "git"              # a git clone that sits in a skills folder
@@ -40,6 +42,9 @@ class Changes:
             "files": {"added": self.added[:limit], "modified": self.modified[:limit], "removed": self.removed[:limit]},
         }
 
+    def sanitize(self) -> None:
+        self.added, self.modified, self.removed = ([clean(p) for p in group] for group in (self.added, self.modified, self.removed))
+
 
 @dataclass
 class Item:
@@ -58,6 +63,16 @@ class Item:
     notes: List[str] = field(default_factory=list)
     compare_url: str = ""
     data: Dict[str, Any] = field(default_factory=dict, repr=False)  # channel-private; never printed
+
+    def sanitize(self) -> None:
+        """Strip control characters from everything that will be shown. Identities used to act on an item
+        (a lock key, a plugin id, a path) live untouched in `data`."""
+        self.name, self.source, self.installed, self.latest, self.compare_url = (
+            clean(self.name), clean(self.source), clean(self.installed), clean(self.latest), clean(self.compare_url))
+        self.agents, self.locations, self.commits, self.notes = (
+            [clean(x) for x in group] for group in (self.agents, self.locations, self.commits, self.notes))
+        if self.changes is not None:
+            self.changes.sanitize()
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -80,9 +95,13 @@ class Result:
     """What happened to one item during `update`."""
     name: str
     kind: str
-    outcome: str  # updated | failed | skipped | dry-run
+    outcome: str  # updated | unchanged | failed
     detail: str = ""
     notes: List[str] = field(default_factory=list)
+
+    def sanitize(self) -> None:
+        self.name, self.detail = clean(self.name), clean(self.detail)
+        self.notes = [clean(n) for n in self.notes]
 
     def to_dict(self) -> Dict[str, Any]:
         return {"name": self.name, "kind": self.kind, "outcome": self.outcome, "detail": self.detail, "notes": self.notes}

@@ -77,11 +77,18 @@ def sanitize_name(name: str) -> str:
 
 
 _CREDENTIALS = re.compile(r"(://)[^/@\s]+@")
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")  # C0/C1 controls except tab and newline
+
+
+def clean(text: str) -> str:
+    """Drop terminal control characters. Names and messages that came from upstream repositories or
+    skill folders are untrusted: an escape sequence in one must not be able to rewrite what we print."""
+    return _CONTROL.sub("", text)
 
 
 def scrub(text: str, limit: int = 300) -> str:
-    """One-line, credential-free version of a tool message that is safe to print."""
-    text = " ".join(_CREDENTIALS.sub(r"\1***@", text or "").split())
+    """One-line, credential-free, control-character-free version of a tool message that is safe to print."""
+    text = " ".join(_CREDENTIALS.sub(r"\1***@", clean(text or "")).split())
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 

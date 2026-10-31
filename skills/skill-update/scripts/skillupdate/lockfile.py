@@ -277,7 +277,7 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Tuple[Mani
 
     clean = [s for s in states if "tree" in s]
     item.data = {
-        "cache": up.cache, "cache_key": _cache_key(up.entry), "folder": up.folder, "up_tree": up.tree,
+        "key": up.key, "cache": up.cache, "cache_key": _cache_key(up.entry), "folder": up.folder, "up_tree": up.tree,
         "moved": up.moved, "copies": states,
         # the files are fine but the lock record is behind: refresh it so `npx skills check` agrees
         "heal": item.status == CURRENT and up.lock_hash != up.tree and bool(clean) and all(s["tree"] == up.tree for s in clean),
@@ -301,7 +301,7 @@ def apply(ctx: Ctx, run: Run, items: List[Item], heal: List[Item]) -> List[Resul
             continue
         results += [_install(run, it, cache, updates) for it in group]
     for it in heal:
-        updates.setdefault(it.name, {})["skillFolderHash"] = it.data["up_tree"]
+        updates.setdefault(it.data["key"], {})["skillFolderHash"] = it.data["up_tree"]
     if updates:
         _write_lock(ctx, run, updates, len(heal))
     return results
@@ -325,7 +325,7 @@ def _install(run: Run, it: Item, cache: RemoteCache, updates: Dict[str, Dict[str
     fields: Dict[str, Any] = {"skillFolderHash": d["up_tree"], "updatedAt": now_iso()}
     if d["moved"]:
         fields["skillPath"] = posixpath.join(d["folder"], "SKILL.md")
-    updates[it.name] = fields
+    updates[d["key"]] = fields
     detail = "%d folder%s replaced" % (replaced, "" if replaced == 1 else "s")
     if it.changes is not None:
         detail += " (%s files)" % it.changes.summary()

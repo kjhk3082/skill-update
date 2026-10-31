@@ -21,8 +21,15 @@ class GitError(Exception):
     pass
 
 
+# Repositories we run git in can carry their own config and hooks. These settings switch off the
+# ways that config could run a command during the operations we perform (status, fetch, merge,
+# stash, log, diff); none of them is needed for skill-update to work.
+_HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "-c", "core.pager=cat",
+           "-c", "core.editor=true", "-c", "diff.external="]
+
+
 def git(*args: str, cwd: Optional[Path] = None, timeout: int = 120) -> Proc:
-    return run(["git", *args], cwd=cwd, timeout=timeout)
+    return run(["git", *_HARDEN, *args], cwd=cwd, timeout=timeout)
 
 
 # Values from lock files and manifests end up on a git command line, so they are checked first:

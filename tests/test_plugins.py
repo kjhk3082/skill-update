@@ -87,6 +87,19 @@ class PluginChannelTests(Sandbox):
         self.assertIn("plugin update fresh@acme --scope user", calls)
         self.assertTrue(any("Restart Claude Code" in n for n in json.loads(out)["notes"]))
 
+    def test_a_plugin_id_with_control_characters_is_never_passed_on_even_when_it_displays_cleanly(self):
+        path = self.plugins_dir / "installed_plugins.json"
+        data = json.loads(path.read_text())
+        data["plugins"]["fresh\x1b@acme"] = [{"scope": "user", "version": "1", "installPath": "/x"}]
+        path.write_text(json.dumps(data))
+        rc, out, _ = self.cli("update", "--yes", "--only", "plugin", "--json")
+        # both entries display as `fresh@acme`; the genuine one is handled, the look-alike is refused
+        outcomes = sorted(r["outcome"] for r in json.loads(out)["results"] if r["name"] == "fresh@acme")
+        self.assertEqual(outcomes, ["failed", "unchanged"])
+        self.assertNotIn("\x1b", out)
+        self.assertEqual([c for c in self.log.read_text().splitlines() if c.startswith("plugin update fresh@acme")],
+                         ["plugin update fresh@acme --scope user"])   # only the genuine plugin, once
+
     def test_dry_run_never_calls_claude(self):
         rc, out, _ = self.cli("update", "--dry-run", "--only", "plugin")
         self.assertEqual(rc, 0)

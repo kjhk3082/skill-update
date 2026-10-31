@@ -81,7 +81,7 @@ python3 skills/skill-update/scripts/skill_update.py update --yes    # unattended
 - **Only from the original source.** A skill is updated from the repository it was installed from, never from somewhere new.
 - **No scripts.** `setup`, `install.sh` and friends are reported, never executed. Folders such as `node_modules` and virtualenvs inside a skill are carried over.
 - **Your repositories are yours.** Git clones outside the skill folders, symlinks into other projects, and diverged clones are reported and left alone.
-- **Hostile input is refused.** Source URLs, refs and folder names from lock files are validated before they reach `git`.
+- **Hostile input is refused.** Source URLs, refs and folder names from lock files are validated before they reach `git`. Git clones whose own config could run a program (`core.fsmonitor`, `core.sshCommand`, filters, …) are left alone, hooks never run, and terminal control characters in names and messages are stripped before anything is printed.
 - **No telemetry.** The only network traffic is `git` talking to the sources your skills came from (and `claude` for plugins). Private repositories use your own git credentials.
 
 Local edits: a skill you edited by hand is replaced after a backup by default, and the preview says so. Use `--keep-modified` to protect edited skills.

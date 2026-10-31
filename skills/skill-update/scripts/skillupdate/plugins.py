@@ -102,7 +102,7 @@ def check(ctx: Ctx, do_refresh: bool = False) -> List[Item]:
             item.notes.append("no version in the catalog; Claude Code decides during the update")
         else:
             item.status = CURRENT if available == version else OUTDATED
-        item.data = {"scope": entry.get("scope", "user")}
+        item.data = {"scope": entry.get("scope", "user"), "key": key}  # `key` is what gets acted on; `name` is only shown
         items.append(item)
         age = _age_days(str((markets.get(market_name) or {}).get("lastUpdated") or ""))
         oldest = max(oldest, age or 0)
@@ -123,15 +123,16 @@ def apply(ctx: Ctx, run: Run, items: List[Item]) -> List[Result]:
     before = _installed()
     results: List[Result] = []
     for it in items:
-        if not _KEY_OK.match(it.name):
-            results.append(Result(it.name, KIND_PLUGIN, "failed", "unexpected plugin name; refusing to pass it to claude"))
+        key = it.data["key"]
+        if not _KEY_OK.match(key) or str(it.data.get("scope")) not in ("user", "project", "local", "managed"):
+            results.append(Result(it.name, KIND_PLUGIN, "failed", "unexpected plugin name or scope; refusing to pass it to claude"))
             continue
-        r = run_cmd([binary, "plugin", "update", it.name, "--scope", str(it.data.get("scope", "user"))], timeout=600)
-        after = _fingerprint(_installed().get(it.name))
+        r = run_cmd([binary, "plugin", "update", key, "--scope", str(it.data["scope"])], timeout=600)
+        after = _fingerprint(_installed().get(key))
         if not r.ok:
             results.append(Result(it.name, KIND_PLUGIN, "failed", first_error(r)))
-        elif after != _fingerprint(before.get(it.name)):
-            old, new = _fingerprint(before.get(it.name))[0], after[0]
+        elif after != _fingerprint(before.get(key)):
+            old, new = _fingerprint(before.get(key))[0], after[0]
             results.append(Result(it.name, KIND_PLUGIN, "updated", "%s → %s" % (old, new) if old != new else "updated"))
         else:
             results.append(Result(it.name, KIND_PLUGIN, "unchanged", "already up to date"))

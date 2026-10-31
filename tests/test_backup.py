@@ -48,6 +48,16 @@ class BackupSafetyTests(Sandbox):
         backup.rollback(run.id)
         self.assertEqual((target / "SKILL.md").read_text(), "old")
 
+    def test_local_state_is_never_moved_through_a_symlink_in_the_new_folder(self):
+        old = self.folder("old", {"SKILL.md": "old", "scripts/node_modules/dep/index.js": "dep"})
+        outside = self.tmp / "outside"                    # somewhere a hostile upstream tries to aim us at
+        outside.mkdir()
+        new = self.folder("new", {"SKILL.md": "new"})
+        (new / "scripts").symlink_to(outside)
+        backup.carry_local_state(old, new)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertTrue((old / "scripts" / "node_modules" / "dep" / "index.js").exists())  # stays in the backup
+
     def test_rolling_back_twice_does_nothing_the_second_time(self):
         target = self.folder("skill", {"SKILL.md": "old"})
         source = self.folder("source", {"SKILL.md": "new"})

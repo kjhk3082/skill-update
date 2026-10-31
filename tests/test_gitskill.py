@@ -90,6 +90,49 @@ class GitChannelTests(Sandbox):
         self.cli("update", "--yes")
         self.assertEqual(git("rev-parse", "HEAD", cwd=work), head)
 
+    def marker_script(self, name):
+        marker = self.tmp / (name + ".ran")
+        script = self.tmp / (name + ".sh")
+        script.write_text("#!/bin/sh\ntouch %s\n" % marker)
+        script.chmod(0o755)
+        return script, marker
+
+    def test_a_clone_whose_config_can_run_programs_is_left_alone(self):
+        up, repo = self.pack()
+        for key in ("core.fsmonitor", "core.sshCommand", "credential.helper", "remote.origin.uploadpack"):
+            script, marker = self.marker_script(key.replace(".", "-"))
+            git("config", key, str(script), cwd=repo)
+        up.commit({"SKILL.md": "---\nname: pack\n---\nv2\n"})
+        it = self.item(self.check(), "pack")
+        self.assertEqual(it["status"], "blocked")
+        self.assertIn("can run programs", it["notes"][0])
+        self.cli("update", "--yes")
+        self.assertIn("v1", (repo / "SKILL.md").read_text())
+        self.assertEqual(list(self.tmp.glob("*.ran")), [])
+
+    def test_hooks_inside_a_cloned_skill_never_run(self):
+        up, repo = self.pack()
+        for hook in ("reference-transaction", "post-merge", "pre-auto-gc", "post-checkout"):
+            script, _marker = self.marker_script(hook)
+            (repo / ".git" / "hooks" / hook).write_text(script.read_text())
+            (repo / ".git" / "hooks" / hook).chmod(0o755)
+        up.commit({"SKILL.md": "---\nname: pack\n---\nv2\n"})
+        self.cli("check")
+        rc, out, err = self.cli("update", "--yes", "--json")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("v2", (repo / "SKILL.md").read_text())   # the update itself still worked
+        self.assertEqual(list(self.tmp.glob("*.ran")), [])
+
+    def test_a_git_file_instead_of_a_git_folder_is_not_managed(self):
+        self.claude.mkdir(parents=True)
+        d = self.claude / "linked-worktree"
+        d.mkdir()
+        (d / "SKILL.md").write_text("---\nname: linked-worktree\n---\n")
+        (d / ".git").write_text("gitdir: /somewhere/else\n")
+        it = self.item(self.check(), "linked-worktree")
+        self.assertEqual(it["status"], "blocked")
+        self.assertIn("not a plain folder", it["notes"][0])
+
     def test_setup_script_is_reported_but_never_run(self):
         up, repo = self.pack()
         up.commit({"setup": ("#!/bin/sh\ntouch %s/ran\n" % self.tmp, 0o755), "SKILL.md": "---\nname: pack\n---\nv2\n"})

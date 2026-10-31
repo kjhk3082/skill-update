@@ -88,6 +88,8 @@ def collect(ctx: Ctx, refresh_plugins: bool) -> Collected:
     if ignored:
         ctx.note("Left out %d item%s listed in --ignore or config.json." % (len(ignored), "" if len(ignored) == 1 else "s"))
     items = [i for i in items if i.name not in ctx.opts.ignore]
+    for i in items:
+        i.sanitize()  # names and notes can come from upstream repositories: never print their control characters
     return Collected(items, sc, time.time() - started)
 
 
@@ -172,6 +174,8 @@ def cmd_update(args: argparse.Namespace) -> int:
             raise
         finally:
             run.finish()
+    for r in results:
+        r.sanitize()
 
     backed_up = not args.no_backup
     if args.json:

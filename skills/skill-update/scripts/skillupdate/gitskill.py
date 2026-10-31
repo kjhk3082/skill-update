@@ -6,6 +6,7 @@ reported by the scanner as unmanaged and never fetched or pulled.
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import List, Optional
@@ -19,6 +20,30 @@ from .util import first_error, scrub, short
 
 SELF = "skill-update"
 SETUP_FILES = ("setup", "setup.sh", "install.sh", "bootstrap.sh")
+
+
+# Settings that make git run a program of the repository's choosing. A skill folder that ships its own
+# .git/config with one of these is never fetched into: the user installed a skill, not permission to
+# run code every time a maintenance tool looks at it.
+_RISKY_CONFIG = re.compile(
+    r"^(core\.(fsmonitor|sshcommand|hookspath|pager|editor|askpass|gitproxy)|diff\.external|gpg\.program"
+    r"|credential\.(.+\.)?helper|(filter|merge|diff)\..+\.(clean|smudge|process|driver|command|textconv)"
+    r"|remote\..+\.(uploadpack|receivepack|vcs|proxy)|include\.path|includeif\..+\.path|http\.proxy)$", re.I)
+
+
+def _unsafe_reason(repo: Path) -> Optional[str]:
+    """Why git should not be run in this folder, or None when it looks like an ordinary clone."""
+    dot_git = repo / ".git"
+    if not dot_git.is_dir() or dot_git.is_symlink():
+        return "its .git is not a plain folder (a worktree, submodule or link)"
+    if hasattr(os, "geteuid") and dot_git.stat().st_uid != os.geteuid():
+        return "its .git belongs to another user"
+    config = git("config", "--local", "--list", "-z", cwd=repo)
+    for entry in config.out.split("\0"):
+        key = entry.split("\n", 1)[0].strip()
+        if key and _RISKY_CONFIG.match(key):
+            return "its .git/config sets %s, which can run programs" % key
+    return None
 
 
 def check(ctx: Ctx, skills: List[Skill]) -> List[Item]:
@@ -38,6 +63,11 @@ def _count(repo: Path, *args: str) -> str:
 
 def _check_repo(ctx: Ctx, s: Skill) -> Optional[Item]:
     repo = s.real
+    unsafe = _unsafe_reason(repo)
+    if unsafe:
+        ctx.claimed.add(str(repo))
+        return Item(name=s.name, kind=KIND_GIT, status=BLOCKED, agents=s.agents, locations=[short(repo)],
+                    notes=["not touched: %s" % unsafe])
     if not git("remote", cwd=repo).out.split():
         ctx.unmanaged_notes[str(repo)] = ["git repository without a remote"]
         return None

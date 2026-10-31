@@ -93,6 +93,16 @@ class CliTests(Sandbox):
         backups = list((self.tmp / "state" / "backups").glob("*/dirs/*"))
         self.assertEqual(backups, [])
 
+    def test_control_characters_in_names_never_reach_the_terminal(self):
+        evil = self.claude / "evil\x1b[2J\x1b]0;pwned\x07name"
+        evil.mkdir(parents=True)
+        (evil / "SKILL.md").write_text("---\nname: x\n---\n")
+        for args in (["check", "-v"], ["check", "--json"], ["update", "--dry-run"]):
+            rc, out, err = self.cli(*args)
+            self.assertNotIn("\x1b", out + err, args)
+            self.assertNotIn("\x07", out + err, args)
+        self.assertIn("evil[2J]0;pwnedname", self.cli("check", "-v")[1])
+
     def test_an_unexpected_error_is_a_short_message_not_a_traceback(self):
         import io
         from contextlib import redirect_stderr

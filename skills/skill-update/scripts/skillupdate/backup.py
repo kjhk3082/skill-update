@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -31,6 +32,21 @@ def _move(src: Path, dst: Path) -> None:
         shutil.move(str(src), str(dst))
 
 
+def _plain_folders_down_to(base: Path, rel: Path) -> bool:
+    """True when every folder from `base` to the parent of `rel` really is a folder, not a symlink.
+    The new folder comes from upstream and may contain a symlink such as `scripts -> ~/.ssh`; following
+    it would move our files outside the skill."""
+    cur = base
+    for part in rel.parts[:-1]:
+        cur = cur / part
+        try:
+            if not stat.S_ISDIR(os.lstat(cur).st_mode):
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def carry_local_state(old: Path, new: Path) -> None:
     """Move node_modules / virtualenvs from the replaced folder into the new one, so no reinstall is needed."""
     for root, dirs, _files in os.walk(old):
@@ -38,8 +54,9 @@ def carry_local_state(old: Path, new: Path) -> None:
             if d not in LOCAL_STATE_DIRS:
                 continue
             dirs.remove(d)
-            dst = new / os.path.relpath(os.path.join(root, d), old)
-            if dst.exists() or not dst.parent.is_dir():
+            rel = Path(os.path.relpath(os.path.join(root, d), old))
+            dst = new / rel
+            if os.path.lexists(dst) or not _plain_folders_down_to(new, rel):
                 continue
             try:
                 _move(Path(root) / d, dst)

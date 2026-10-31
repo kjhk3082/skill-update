@@ -62,14 +62,16 @@ Each source repository gets a cache under `~/.skill-update/cache/repos/`: a **pa
 
 All values that reach a command line (URLs, refs, folder names, plugin names) are validated first and separated with `--` where git allows it. A lock file containing `--upload-pack=…` is reported as an error, not run.
 
+Names, notes and messages that come from upstream repositories or skill folders are stripped of terminal control characters before they are printed. The identity used to act on an item (a lock key, a plugin id) is kept separately from the cleaned name that is shown.
+
 ## Applying an update
 
 For a lock-managed folder:
 
 1. Copy the upstream folder out of the cache into a staging folder.
 2. Check that the staged folder hashes to the upstream hash.
-3. Move the installed folder into `~/.skill-update/backups/<run>/dirs/`, move the staged folder into its place, then move `node_modules` / virtualenvs from the old folder into the new one.
-4. Hash the installed folder again. If it differs, move the backup back and report the failure.
+3. Move the installed folder into `~/.skill-update/backups/<run>/dirs/` and move the staged folder into its place.
+4. Hash the installed folder again. If it differs, move the backup back (complete, `node_modules` included) and report the failure. Only after it passes, move `node_modules` / virtualenvs from the old folder into the new one. A symlink anywhere on that path inside the new folder stops the move, so a hostile upstream cannot aim it elsewhere.
 5. After every copy of a skill succeeded, write the new hash into the lock entry (re-read and written atomically, with a backup of the lock file). Only lock format version 3 is ever written.
 
 A skill updating itself is always processed last, so the running tool is not replaced while other work is pending.
@@ -87,6 +89,7 @@ A lock file (`~/.skill-update/run.lock`, `flock`) keeps two runs from changing t
 ## What is left alone on purpose
 
 - Git clones outside the skill folders, symlinks into other projects, and skills that live inside a larger repository. Those are somebody's working copies: reported as unmanaged, never fetched.
+- Git clones whose `.git` is not a plain folder owned by the current user, or whose `.git/config` sets something that makes git run a program (`core.fsmonitor`, `core.sshCommand`, `core.hooksPath`, credential helpers, `filter.*`, `remote.*.uploadpack`, `include.*`, …). A skill is data a user installed, not permission to run code whenever a maintenance tool looks at it. Every git command also runs with `core.fsmonitor=false`, `core.hooksPath=/dev/null`, `core.pager=cat`, `core.editor=true` and `diff.external=` switched off, so hooks never run.
 - Diverged clones.
 - Anything with no recorded origin.
 - Scripts shipped by a skill. skill-update never executes anything that comes from an update.

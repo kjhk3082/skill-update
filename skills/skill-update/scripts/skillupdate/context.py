@@ -5,6 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, TypeVar
 
+from .util import clean
+
 T = TypeVar("T")
 R = TypeVar("R")
 
@@ -20,6 +22,7 @@ class Ctx:
         self.workers = 8
 
     def note(self, message: str) -> None:
+        message = clean(message)
         if message not in self.notes:
             self.notes.append(message)
 
