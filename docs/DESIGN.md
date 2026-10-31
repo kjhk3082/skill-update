@@ -83,7 +83,7 @@ A skill updating itself is always processed last, so the running tool is not rep
 
 For a git clone: stash uncommitted edits (including untracked files) if any, `git merge --ff-only @{u}`, and record old and new HEAD plus the stash in the run manifest. A diverged clone is never touched.
 
-For plugins: `claude plugin marketplace update`, then `claude plugin update <name@marketplace>` per plugin, then compare the registry before and after to learn what really changed.
+For plugins: `claude plugin marketplace update`, then `claude plugin update <name@marketplace>` per plugin, then compare the registry before and after to learn what really changed. A plugin that its marketplace no longer lists (or has renamed) cannot be updated by anyone, so it is reported under "needs your attention" with the new name if there is one, instead of being attempted.
 
 ## Backups and rollback
 

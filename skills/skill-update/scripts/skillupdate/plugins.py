@@ -13,11 +13,11 @@ import shutil
 import time
 from calendar import timegm
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .backup import Run
 from .context import Ctx
-from .model import CURRENT, KIND_PLUGIN, OUTDATED, UNKNOWN, Item, Result
+from .model import BLOCKED, CURRENT, KIND_PLUGIN, OUTDATED, UNKNOWN, Item, Result
 from .util import first_error, home, read_json, run as run_cmd, scrub, short
 
 STALE_CATALOG_DAYS = 7
@@ -44,24 +44,30 @@ def _markets() -> Dict[str, Dict[str, Any]]:
     return data if isinstance(data, dict) else {}
 
 
-def _catalog_version(market: Optional[Dict[str, Any]], name: str) -> Optional[str]:
-    """The version a marketplace publishes for a plugin, from its catalog or the plugin's own manifest."""
+def _catalog_lookup(market: Optional[Dict[str, Any]], name: str) -> Tuple[Optional[bool], Optional[str], Optional[str]]:
+    """(is it listed, the version the catalog publishes, the name it was renamed to).
+
+    The first value is None when the catalog itself could not be read, so nothing can be said."""
     if not market:
-        return None
+        return None, None, None
     root = Path(str(market.get("installLocation") or ""))
     catalog = read_json(root / ".claude-plugin" / "marketplace.json")
     entries = catalog.get("plugins") if isinstance(catalog, dict) else None
-    entry = next((p for p in entries or [] if isinstance(p, dict) and p.get("name") == name), None)
+    if not isinstance(entries, list):
+        return None, None, None
+    entry = next((p for p in entries if isinstance(p, dict) and p.get("name") == name), None)
     if entry is None:
-        return None
+        renames = catalog.get("renames")
+        renamed = renames.get(name) if isinstance(renames, dict) else None
+        return False, None, str(renamed) if renamed else None
     if entry.get("version"):
-        return str(entry["version"])
+        return True, str(entry["version"]), None
     source = entry.get("source")
     if isinstance(source, str):  # a folder inside the marketplace repository
         manifest = read_json((root / source / ".claude-plugin" / "plugin.json").resolve())
         if isinstance(manifest, dict) and manifest.get("version"):
-            return str(manifest["version"])
-    return None
+            return True, str(manifest["version"]), None
+    return True, None, None
 
 
 def _age_days(iso: str) -> Optional[int]:
@@ -96,10 +102,15 @@ def check(ctx: Ctx, do_refresh: bool = False) -> List[Item]:
             continue  # installed for one project only
         name, _, market_name = key.partition("@")
         version = str(entry.get("version") or "")
-        available = _catalog_version(markets.get(market_name), name)
+        listed, available, renamed_to = _catalog_lookup(markets.get(market_name), name)
         item = Item(name=key, kind=KIND_PLUGIN, status=UNKNOWN, source=market_name, installed=version,
                     latest=available or "", locations=[short(entry.get("installPath", ""))])
-        if available is None:
+        if listed is False:  # nothing Claude Code can update: say so now instead of failing during the update
+            item.status = BLOCKED
+            item.notes.append(("renamed to %s in the %s marketplace; install that one and remove this one" % (renamed_to, market_name))
+                              if renamed_to else
+                              "no longer listed in the %s marketplace, so it cannot be updated (remove it with `claude plugin uninstall`)" % market_name)
+        elif available is None:
             item.notes.append("no version in the catalog; Claude Code decides during the update")
         else:
             item.status = CURRENT if available == version else OUTDATED

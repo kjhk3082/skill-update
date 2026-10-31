@@ -37,8 +37,9 @@ class PluginChannelTests(Sandbox):
         self.market = self.plugins_dir / "marketplaces" / "acme"
         (self.market / ".claude-plugin").mkdir(parents=True)
         self.plugins_dir.mkdir(exist_ok=True)
-        # three plugins: one with a newer catalog version, one current, one whose catalog publishes no version
-        catalog = {"name": "acme", "plugins": [
+        # plugins: one with a newer catalog version, one current, one whose catalog publishes no version,
+        # one the marketplace dropped, one it renamed
+        catalog = {"name": "acme", "renames": {"moved": "moved-v2"}, "plugins": [
             {"name": "fresh", "source": "./plugins/fresh", "version": "2.0.0"},
             {"name": "same", "source": "./plugins/same"},
             {"name": "mystery", "source": {"source": "github", "repo": "acme/mystery"}},
@@ -52,6 +53,7 @@ class PluginChannelTests(Sandbox):
         entry = lambda v: [{"scope": "user", "version": v, "installPath": str(self.plugins_dir / "cache" / "x"), "gitCommitSha": "abc"}]
         (self.plugins_dir / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {
             "fresh@acme": entry("1.0.0"), "same@acme": entry("1.1.0"), "mystery@acme": entry("0.3.0"),
+            "gone@acme": entry("0.1.0"), "moved@acme": entry("0.2.0"),
             "scoped@acme": [{"scope": "project", "version": "9", "installPath": "/x"}]}}))
 
         self.log = self.tmp / "claude.log"
@@ -65,9 +67,20 @@ class PluginChannelTests(Sandbox):
     def test_versions_decide_the_status_and_unknown_is_not_guessed(self):
         data = self.check("--only", "plugin")
         self.assertEqual({i["name"]: i["status"] for i in data["items"]},
-                         {"fresh@acme": "outdated", "same@acme": "current", "mystery@acme": "unknown"})
+                         {"fresh@acme": "outdated", "same@acme": "current", "mystery@acme": "unknown",
+                          "gone@acme": "blocked", "moved@acme": "blocked"})
         self.assertEqual(self.item(data, "fresh@acme")["latest"], "2.0.0")
         self.assertFalse(self.log.exists(), "check must not run claude unless --refresh is given")
+
+    def test_plugins_the_marketplace_no_longer_lists_are_reported_not_attempted(self):
+        data = self.check("--only", "plugin")
+        self.assertIn("no longer listed", self.item(data, "gone@acme")["notes"][0])
+        self.assertIn("renamed to moved-v2", self.item(data, "moved@acme")["notes"][0])
+        rc, out, err = self.cli("update", "--yes", "--only", "plugin", "--json")
+        self.assertEqual(rc, 0, err)                                    # nothing failed: they were never attempted
+        names = {r["name"] for r in json.loads(out)["results"]}
+        self.assertFalse({"gone@acme", "moved@acme"} & names)
+        self.assertFalse([c for c in self.log.read_text().splitlines() if "gone@acme" in c or "moved@acme" in c])
 
     def test_plugins_installed_for_one_project_only_are_skipped(self):
         names = [i["name"] for i in self.check("--only", "plugin")["items"]]
@@ -92,6 +105,10 @@ class PluginChannelTests(Sandbox):
         data = json.loads(path.read_text())
         data["plugins"]["fresh\x1b@acme"] = [{"scope": "user", "version": "1", "installPath": "/x"}]
         path.write_text(json.dumps(data))
+        catalog_path = self.market / ".claude-plugin" / "marketplace.json"
+        catalog = json.loads(catalog_path.read_text())
+        catalog["plugins"].append({"name": "fresh\x1b", "source": {"source": "github", "repo": "evil/x"}})  # listed, no version
+        catalog_path.write_text(json.dumps(catalog))
         rc, out, _ = self.cli("update", "--yes", "--only", "plugin", "--json")
         # both entries display as `fresh@acme`; the genuine one is handled, the look-alike is refused
         outcomes = sorted(r["outcome"] for r in json.loads(out)["results"] if r["name"] == "fresh@acme")
