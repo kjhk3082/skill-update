@@ -8,6 +8,7 @@ from unittest import mock
 from helpers import Sandbox, git
 
 from skillupdate import backup, gitskill, util
+from skillupdate.gitops import GitError, RemoteCache
 from skillupdate.model import KIND_GIT, OUTDATED, Item
 
 SKILL = "---\nname: %s\n---\n%s\n"
@@ -116,6 +117,34 @@ class GitTrustTests(Sandbox):
         self.assertEqual(result.outcome, "failed")
         self.assertEqual((repo / "lib" / "a.txt").read_text(), "my edit\n")
         self.assertEqual(git("stash", "list", cwd=repo), "")                     # nothing left behind in the stash
+
+
+class LegacyCacheTests(Sandbox):
+    def test_a_cache_made_by_an_earlier_version_heals_itself(self):
+        up = self.upstream()
+        files = {"skills/demo/SKILL.md": SKILL % ("demo", "v1"), ".claude/skills/demo/SKILL.md": SKILL % ("demo", "claude v1")}
+        up.commit(files)
+        self.install(up, ".claude/skills/demo", self.claude / "demo")
+        self.write_lock({"demo": self.lock_entry(up, ".claude/skills/demo")})
+        up.commit({".claude/skills/demo/SKILL.md": SKILL % ("demo", "claude v2")})
+        # the cache as version 0.1.0-dev built it: `git clone --sparse`, which keeps cone mode in config.worktree
+        cache = RemoteCache(up.url)
+        cache.dir.parent.mkdir(parents=True, exist_ok=True)
+        git("clone", "-q", "--filter=blob:none", "--depth=1", "--no-checkout", "--sparse", up.url, str(cache.dir))
+        self.assertTrue((cache.dir / ".git" / "config.worktree").exists())
+        rc, out, err = self.cli("update", "--yes", "--json")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out)["results"][0]["outcome"], "updated")
+        self.assertIn("claude v2", (self.claude / "demo" / "SKILL.md").read_text())
+
+    def test_a_checkout_that_misses_a_folder_is_an_error_not_a_crash(self):
+        up = self.upstream()
+        up.commit({"skills/demo/SKILL.md": SKILL % ("demo", "v1")})
+        cache = RemoteCache(up.url)
+        cache.sync()
+        with mock.patch.object(RemoteCache, "_checkout", return_value=None):
+            with self.assertRaises(GitError):
+                cache.materialize(["skills/demo"])
 
 
 class LockHardeningTests(Sandbox):

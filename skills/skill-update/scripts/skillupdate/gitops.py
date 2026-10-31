@@ -90,6 +90,10 @@ class RemoteCache:
         """Fetch the newest commit of the source and return its hash. Raises GitError."""
         if not safe_url(self.url) or not safe_ref(self.ref):
             raise GitError("unsupported source address in the lock file; refusing to pass it to git")
+        if (self.dir / ".git" / "config.worktree").exists():
+            # a cache made by an earlier version (`git clone --sparse` keeps its sparse settings in a
+            # worktree config that overrides ours); it is only a cache, so start it again
+            shutil.rmtree(self.dir, ignore_errors=True)
         fresh = False
         for attempt in (1, 2):
             if not (self.dir / ".git").exists():
@@ -176,6 +180,9 @@ class RemoteCache:
             r = git("config", key, value, cwd=self.dir)
             if not r.ok:
                 raise GitError(first_error(r))
+        for key, want in (("core.sparseCheckout", "true"), ("core.sparseCheckoutCone", "false")):
+            if git("config", "--get", key, cwd=self.dir).out.strip() != want:  # another config scope overrides ours
+                raise GitError("the cache has unexpected sparse-checkout settings (%s)" % key)
         info = self.dir / ".git" / "info"
         info.mkdir(parents=True, exist_ok=True)
         (info / "sparse-checkout").write_text("\n".join(patterns) + "\n", encoding="utf-8")
@@ -188,6 +195,9 @@ class RemoteCache:
         if not all(safe_folder(f) for f in folders):
             raise GitError("unsafe folder name; refusing to check it out")
         self._checkout(["/*"] if "" in folders else ["/%s/" % f for f in sorted(set(folders))], 600)
+        absent = [f for f in folders if f and not (self.dir / f).is_dir()]
+        if absent:
+            raise GitError("the checkout did not produce %s" % absent[0])
         return self.dir
 
     def rebuild(self) -> str:
