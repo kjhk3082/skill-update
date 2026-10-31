@@ -150,5 +150,5 @@ def apply(ctx: Ctx, run: Run, items: List[Item]) -> List[Result]:
         else:
             results.append(Result(it.name, KIND_PLUGIN, "unchanged", "already up to date"))
     if any(r.outcome == "updated" for r in results):
-        ctx.note("Restart Claude Code to load the updated plugins.")
+        ctx.note("Restart Claude Code to load the updated plugins. skill-update's rollback does not cover plugin updates.")
     return results

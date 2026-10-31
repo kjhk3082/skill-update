@@ -99,6 +99,7 @@ class PluginChannelTests(Sandbox):
         self.assertEqual(calls[0], "plugin marketplace update")
         self.assertIn("plugin update fresh@acme --scope user", calls)
         self.assertTrue(any("Restart Claude Code" in n for n in json.loads(out)["notes"]))
+        self.assertIsNone(json.loads(out)["run_id"])      # nothing rollback could undo, so no run to offer
 
     def test_a_plugin_id_with_control_characters_is_never_passed_on_even_when_it_displays_cleanly(self):
         path = self.plugins_dir / "installed_plugins.json"

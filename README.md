@@ -141,6 +141,7 @@ Environment: `SKILL_UPDATE_HOME` (cache and backups, default `~/.skill-update`),
 
 - **Unmanaged skills** (copied by hand, or installed by a tool that keeps no record) cannot be updated automatically. If you know where one came from, `npx skills add owner/repo` brings it under management.
 - **Folders the installer trims.** `npx skills add` leaves out `metadata.json` files, so a skill that has one still counts as current when it matches what the installer would have produced.
+- **Rollback covers skills, not plugins.** Plugin updates are Claude Code's own; undo one with its commands.
 - **Plugins** that their marketplace no longer lists are reported as needing attention (with the new name when it was renamed) rather than attempted. Plugin changes apply when Claude Code restarts. Plugins whose catalog publishes no version are handed to `claude plugin update`, which knows whether something newer exists.
 - **Category folders** that hold skills one level deeper (as Hermes does) are not scanned yet.
 - **Windows** is untested; use WSL.

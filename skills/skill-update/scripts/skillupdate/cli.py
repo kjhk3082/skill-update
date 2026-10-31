@@ -189,7 +189,7 @@ def cmd_update(args: argparse.Namespace) -> int:
     for r in results:
         r.sanitize()
 
-    backed_up = not args.no_backup
+    backed_up = not args.no_backup and bool(run.entries)  # plugin updates are Claude Code's; rollback cannot undo them
     if args.json:
         _dump(report.update_json(results, run.id, skipped, ctx.notes, backed_up))
     else:
