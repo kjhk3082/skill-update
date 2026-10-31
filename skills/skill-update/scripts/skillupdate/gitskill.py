@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
 from typing import List, Optional
 
 from .backup import Run
 from .context import Ctx
 from .discover import Skill
-from .gitops import git
+from .gitops import git, safe_remote
 from .model import BLOCKED, CURRENT, ERROR, KIND_GIT, OUTDATED, UNKNOWN, Changes, Item, Result
 from .util import first_error, scrub, short
 
@@ -22,13 +23,19 @@ SELF = "skill-update"
 SETUP_FILES = ("setup", "setup.sh", "install.sh", "bootstrap.sh")
 
 
-# Settings that make git run a program of the repository's choosing. A skill folder that ships its own
-# .git/config with one of these is never fetched into: the user installed a skill, not permission to
-# run code every time a maintenance tool looks at it.
-_RISKY_CONFIG = re.compile(
-    r"^(core\.(fsmonitor|sshcommand|hookspath|pager|editor|askpass|gitproxy)|diff\.external|gpg\.program"
-    r"|credential\.(.+\.)?helper|(filter|merge|diff)\..+\.(clean|smudge|process|driver|command|textconv)"
-    r"|remote\..+\.(uploadpack|receivepack|vcs|proxy)|include\.path|includeif\..+\.path|http\.proxy)$", re.I)
+# A skill folder is data the user installed, not permission to run code every time a maintenance tool
+# looks at it. A clone's own git config can make git run programs (core.fsmonitor, core.sshCommand,
+# credential helpers, filters, gpg programs, includes, protocol and url rewrites, ...), and the list of
+# such settings keeps growing. So instead of naming the bad keys, only these well-known harmless ones
+# are accepted in the repository's own config; anything else and the clone is left alone.
+_SAFE_CONFIG = re.compile(
+    r"^(core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks"
+    r"|autocrlf|eol|sparsecheckout|sparsecheckoutcone|untrackedcache|trustctime|checkstat)"
+    r"|remote\..+\.(url|pushurl|fetch|push|tagopt|promisor|partialclonefilter)"
+    r"|branch\..+\.(remote|merge|rebase|pushremote|description)"
+    r"|submodule\..+\.(url|active)"
+    r"|user\.(name|email)|init\.defaultbranch|pull\.(rebase|ff)|fetch\.(prune|prunetags)"
+    r"|extensions\.(partialclone|objectformat|worktreeconfig))$", re.I)
 
 
 def _unsafe_reason(repo: Path) -> Optional[str]:
@@ -38,11 +45,16 @@ def _unsafe_reason(repo: Path) -> Optional[str]:
         return "its .git is not a plain folder (a worktree, submodule or link)"
     if hasattr(os, "geteuid") and dot_git.stat().st_uid != os.geteuid():
         return "its .git belongs to another user"
-    config = git("config", "--local", "--list", "-z", cwd=repo)
-    for entry in config.out.split("\0"):
-        key = entry.split("\n", 1)[0].strip()
-        if key and _RISKY_CONFIG.match(key):
-            return "its .git/config sets %s, which can run programs" % key
+    # the effective config, not just .git/config: with extensions.worktreeConfig git also reads
+    # .git/config.worktree, and included files count too. User-level and system settings are the user's own.
+    config = git("config", "--list", "--show-scope", "-z", cwd=repo)
+    if not config.ok:
+        return "its git config could not be read"
+    tokens = config.out.split("\0")
+    for scope, record in zip(tokens[0::2], tokens[1::2]):
+        key = record.split("\n", 1)[0].strip()
+        if scope in ("local", "worktree") and key and not _SAFE_CONFIG.match(key):
+            return "its git config sets %s, which skill-update does not trust" % key
     return None
 
 
@@ -81,15 +93,25 @@ def _check_repo(ctx: Ctx, s: Skill) -> Optional[Item]:
         item.notes.append("detached HEAD" if not branch.ok else "branch %s tracks no remote branch" % branch.out.strip())
         return item
     remote = upstream.out.strip().split("/")[0]
-    item.source = _source(_count(repo, "config", "--get", "remote.%s.url" % remote))
+    address = _count(repo, "ls-remote", "--get-url", remote)  # as git will use it, after any url rewriting
+    item.source = _source(address)
+    if not safe_remote(address):
+        item.status = BLOCKED
+        item.notes.append("not touched: the remote address is not an ordinary https, ssh, git or file address")
+        return item
 
-    fetched = git("fetch", "--quiet", "--no-tags", remote, cwd=repo, timeout=300)
+    fetched = git("fetch", "--quiet", "--no-tags", "--recurse-submodules=no", "--", remote, cwd=repo, timeout=300)
     if not fetched.ok:
         item.status = ERROR
         item.notes.append(first_error(fetched))
         return item
 
-    ahead, behind = (int(n) for n in _count(repo, "rev-list", "--left-right", "--count", "HEAD...@{u}").split())
+    counts = _count(repo, "rev-list", "--left-right", "--count", "HEAD...@{u}").split()
+    if len(counts) != 2 or not all(c.isdigit() for c in counts):
+        item.status = ERROR
+        item.notes.append("could not compare it with its upstream branch")
+        return item
+    ahead, behind = int(counts[0]), int(counts[1])
     dirty = bool(_count(repo, "status", "--porcelain"))
     item.installed, item.latest = _count(repo, "rev-parse", "--short", "HEAD"), _count(repo, "rev-parse", "--short", "@{u}")
     item.modified = dirty
@@ -128,10 +150,17 @@ def apply(ctx: Ctx, run: Run, items: List[Item]) -> List[Result]:
     return [_pull(run, it) for it in sorted(items, key=lambda i: (i.name == SELF, i.name))]
 
 
+def _drop_stash(repo: Path, sha: str) -> None:
+    listed = git("stash", "list", "--format=%H", cwd=repo).out.split()
+    if sha in listed:
+        git("stash", "drop", "-q", "stash@{%d}" % listed.index(sha), cwd=repo)
+
+
 def _pull(run: Run, it: Item) -> Result:
     repo = Path(it.data["repo"])
     old = _count(repo, "rev-parse", "HEAD")
     stash: Optional[str] = None
+    entry: Optional[dict] = None
     if it.data["dirty"]:  # keep the user's edits safe in a stash instead of overwriting them
         before = _count(repo, "rev-parse", "-q", "--verify", "refs/stash")
         r = git("stash", "push", "--include-untracked", "-m", "skill-update %s" % run.id, cwd=repo)
@@ -139,13 +168,31 @@ def _pull(run: Run, it: Item) -> Result:
             return Result(it.name, KIND_GIT, "failed", "could not set your local edits aside: %s" % first_error(r))
         after = _count(repo, "rev-parse", "-q", "--verify", "refs/stash")
         stash = after if after and after != before else None
-    merged = git("merge", "--ff-only", "-q", "@{u}", cwd=repo, timeout=300)
-    if not merged.ok:
+        if stash:  # written down before anything else can go wrong, so an interruption cannot lose track of the edits
+            entry = run.record_git(repo, old, None, stash, it.name, state="stashed")
+    try:
+        merged = git("merge", "--ff-only", "-q", "@{u}", cwd=repo, timeout=300)
+    except BaseException:
         if stash:
-            git("stash", "pop", "-q", cwd=repo)
-        return Result(it.name, KIND_GIT, "failed", first_error(merged))
+            print("skill-update: your edits to %s are saved in `git stash` (%s)" % (it.name, stash[:12]), file=sys.stderr)
+        raise
+    if not merged.ok:
+        note = ""
+        if stash:
+            if git("stash", "apply", "-q", stash, cwd=repo).ok:
+                _drop_stash(repo, stash)
+                if entry is not None:
+                    entry["state"] = "reverted"
+                    run.save()
+            else:
+                note = "; your edits are still saved in `git stash`"
+        return Result(it.name, KIND_GIT, "failed", first_error(merged) + note)
     new = _count(repo, "rev-parse", "HEAD")
-    run.record_git(repo, old, new, stash, it.name)
+    if entry is not None:
+        entry["new"], entry["state"] = new, "done"
+        run.save()
+    else:
+        run.record_git(repo, old, new, stash, it.name)
     notes = []
     if stash:
         notes.append("your local edits are saved in `git stash` (\"skill-update %s\")" % run.id)

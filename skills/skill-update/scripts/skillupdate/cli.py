@@ -49,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     u.add_argument("--dry-run", action="store_true", help="show the plan and change nothing")
     u.add_argument("--keep-modified", action="store_true", help="leave skills you changed locally alone")
     u.add_argument("--no-backup", action="store_true", help="do not keep the replaced folders")
+    u.add_argument("--refresh", action="store_true", help="refresh the Claude Code plugin catalogs before planning")
 
     r = sub.add_parser("rollback", help="restore what an update run replaced")
     r.add_argument("run_id", nargs="?", help="the run to undo (default: the latest)")
@@ -128,10 +129,17 @@ def cmd_scan(args: argparse.Namespace) -> int:
 def cmd_update(args: argparse.Namespace) -> int:
     ctx = _ctx(args)
     style = report.make_style(args.no_color)
-    # a dry run must not write anywhere, and refreshing the plugin catalogs does
-    col = collect(ctx, refresh_plugins=not args.dry_run)
+    # Refreshing the plugin catalogs writes into Claude Code's folders, so it happens only when asked for
+    # (--refresh) or inside the plugin update itself, after the user has agreed.
+    col = collect(ctx, refresh_plugins=args.refresh and not args.dry_run)
     chosen, skipped = policy.select(col.items, args)
     heal = [] if args.names else [i for i in col.items if i.data.get("heal")]
+    edited = sorted(i.name for i in chosen if i.modified)
+    if args.no_backup and edited:
+        print("skill-update: not using --no-backup while %d skill%s local edits (%s). Drop --no-backup, or add --keep-modified."
+              % (len(edited), " has" if len(edited) == 1 else "s have", ", ".join(edited[:5]) + (", …" if len(edited) > 5 else "")),
+              file=sys.stderr)
+        return 2
 
     if not chosen and not heal:
         if args.json:
@@ -151,9 +159,11 @@ def cmd_update(args: argparse.Namespace) -> int:
         else:
             print("\nDry run: nothing was changed.")
         return 0
-    if chosen and not args.yes:
+    if not args.yes:  # anything that writes needs a yes, including refreshing stale lock records
+        question = ("Apply these %d update%s?" % (len(chosen), "" if len(chosen) == 1 else "s")) if chosen else \
+                   ("Refresh %d stale lock record%s?" % (len(heal), "" if len(heal) == 1 else "s"))
         if sys.stdin.isatty() and sys.stdout.isatty() and not args.json:
-            if input("\nApply these %d update%s? [y/N] " % (len(chosen), "" if len(chosen) == 1 else "s")).strip().lower() not in ("y", "yes"):
+            if input("\n%s [y/N] " % question).strip().lower() not in ("y", "yes"):
                 print("Cancelled.")
                 return 0
         else:
@@ -163,17 +173,19 @@ def cmd_update(args: argparse.Namespace) -> int:
     with backup.RunLock():
         run = backup.Run(keep_backup=not args.no_backup)
         results = []
+        finished = False
         try:
             results += lockfile.apply(ctx, run, [i for i in chosen if i.kind == "lock"], heal)
             results += gitskill.apply(ctx, run, [i for i in chosen if i.kind == "git"])
             results += plugins.apply(ctx, run, [i for i in chosen if i.kind == "plugin"])
+            finished = True
         except BaseException:
             if run.entries:  # something was already replaced: say how to undo it before the error is shown
                 print("skill-update: stopped after changing %d item%s. Undo with: python3 skill_update.py rollback %s"
                       % (len(run.entries), "" if len(run.entries) == 1 else "s", run.id), file=sys.stderr)
             raise
         finally:
-            run.finish()
+            run.finish(discard=finished)  # an error or interruption keeps every backup, even with --no-backup
     for r in results:
         r.sanitize()
 

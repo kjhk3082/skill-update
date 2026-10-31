@@ -111,6 +111,21 @@ class Sandbox(unittest.TestCase):
     def read_lock(self) -> Dict[str, Any]:
         return json.loads((self.home / ".agents" / ".skill-lock.json").read_text())
 
+    def clone(self, up: Upstream, name: str = "pack") -> Path:
+        """A git clone sitting in ~/.claude/skills, the way a hand-cloned skill pack would."""
+        self.claude.mkdir(parents=True, exist_ok=True)
+        dest = self.claude / name
+        git("clone", "-q", up.url, str(dest))
+        return dest
+
+    def marker_script(self, name: str) -> Tuple[Path, Path]:
+        """A script that leaves a marker file when run, to prove something was (not) executed."""
+        marker = self.tmp / (name + ".ran")
+        script = self.tmp / (name + ".sh")
+        script.write_text("#!/bin/sh\ntouch %s\n" % marker)
+        script.chmod(0o755)
+        return script, marker
+
     # -- running the tool ---------------------------------------------------------------------
 
     def cli(self, *args: str) -> Tuple[int, str, str]:

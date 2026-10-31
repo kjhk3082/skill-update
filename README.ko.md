@@ -55,7 +55,7 @@ Claude Code, Codex, Cursor, Gemini CLI, OpenCode, GitHub Copilot, Windsurf, Kiro
 | `rollback [실행 번호]` | 업데이트가 교체한 것을 되돌립니다. `--list`로 실행 목록을 봅니다. |
 | `scan` | 어떤 스킬 폴더를 찾았는지 보여 줍니다. 네트워크를 쓰지 않습니다. |
 
-자주 쓰는 옵션: `--json`(에이전트·스크립트용), `--dry-run`, `--keep-modified`(직접 고친 스킬은 건드리지 않음), `--only lock|git|plugin`, `--ignore 이름`, `--root 폴더`(다른 스킬 폴더도 훑기), `--no-backup`, `-v`.
+자주 쓰는 옵션: `--json`(에이전트·스크립트용), `--dry-run`, `--keep-modified`(직접 고친 스킬은 건드리지 않음), `--only lock|git|plugin`, `--ignore 이름`, `--root 폴더`(다른 스킬 폴더도 훑기), `--no-backup`(직접 고친 스킬이 있으면 거부), `--refresh`(플러그인 카탈로그 먼저 새로고침), `-v`.
 
 에이전트 안에서는 스킬이 알아서 이 명령들을 돌리고, 바꾸기 전에 반드시 물어봅니다. 터미널에서는:
 
@@ -76,7 +76,8 @@ python3 skills/skill-update/scripts/skill_update.py update --yes    # 묻지 않
 
 ## 안전장치
 
-- **먼저 백업.** 교체되는 폴더는 `~/.skill-update/backups/<실행 번호>/`로 옮겨집니다. 최근 10번의 실행을 보관하고, `rollback`으로 되돌립니다.
+- **먼저 백업.** 교체되는 폴더는 `~/.skill-update/backups/<실행 번호>/`로 옮겨집니다. 최근 10번의 실행을 보관하고, `rollback`으로 되돌립니다. 되돌릴 때는 그 실행이 바꾼 잠금 기록만 원래대로 하고, 업데이트 뒤에 직접 고친 내용은 stash에 먼저 보관합니다.
+- **원자적 교체.** 폴더는 복사 후 삭제가 아니라 `rename`으로만 옮깁니다. 중간에 끊겨도 옛 폴더나 새 폴더 중 하나가 온전히 남습니다. (스킬 폴더와 `~/.skill-update`가 같은 디스크에 있어야 하며, 아니면 그 스킬은 안내와 함께 건너뜁니다.)
 - **검증.** 교체 뒤 새 폴더의 해시가 원본과 같아야 합니다. 다르면 이전 폴더를 자동으로 복구합니다.
 - **처음 설치한 출처에서만.** 스킬은 설치했던 저장소에서만 갱신하고, 새로운 곳에서 가져오지 않습니다.
 - **스크립트 실행 없음.** `setup`, `install.sh` 같은 것은 알려 줄 뿐 실행하지 않습니다. 스킬 안의 `node_modules`와 가상환경은 그대로 옮겨 둡니다.
@@ -139,6 +140,7 @@ cp -R skill-update/skills/skill-update ~/.claude/skills/      # Codex 등은 ~/.
 ## 알아 둘 점
 
 - **출처 불명 스킬**(손으로 복사했거나, 기록을 남기지 않는 도구로 설치한 것)은 자동 갱신이 불가능합니다. 어디서 왔는지 안다면 `npx skills add owner/repo`로 관리 대상에 올릴 수 있습니다.
+- **설치기가 빼는 파일.** `npx skills add`는 `metadata.json` 파일을 복사하지 않으므로, 설치기가 만들었을 모습과 같다면 `metadata.json`이 있는 스킬도 최신으로 봅니다.
 - **플러그인**은 Claude Code를 다시 시작해야 바뀝니다. 카탈로그가 버전을 공개하지 않는 플러그인은 `claude plugin update`가 새 버전이 있는지 판단합니다.
 - **카테고리 폴더**(Hermes처럼 스킬이 한 단계 더 깊이 있는 구조)는 아직 훑지 않습니다.
 - **윈도우**는 검증하지 못했습니다. WSL을 쓰세요.

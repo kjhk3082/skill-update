@@ -32,7 +32,7 @@ Run it as `python3 "<this skill's folder>/scripts/skill_update.py" ...`. The fol
 | Command | What it does |
 |---|---|
 | `check [--json] [--refresh] [names]` | List what is outdated. `--refresh` also refreshes the plugin marketplaces first. |
-| `update [names] --yes [--dry-run] [--keep-modified] [--no-backup]` | Apply updates. |
+| `update [names] --yes [--dry-run] [--keep-modified] [--no-backup] [--refresh]` | Apply updates. `--no-backup` is refused while a skill has local edits. |
 | `rollback [run_id] [--list]` | Undo an update run. |
 | `scan` | Show which skill folders were found. |
 

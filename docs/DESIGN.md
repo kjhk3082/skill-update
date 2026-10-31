@@ -32,19 +32,21 @@ scan folders ─▶ claim skills per channel ─▶ compare with upstream ─▶
 
 The lock file stores, for every skill, the git **tree hash** of the skill's folder at install time. `treehash.py` computes that hash for any folder on disk exactly as git does (blob hashes, modes `100644`/`100755`/`120000`, git's sorting rule where a directory sorts as if its name ended in `/`). A test compares the result with `git write-tree` on a tree that exercises the awkward cases (a file `a-b` between a folder `a` and a file `a.txt`, an executable, a symlink, an empty folder, a non-ASCII name).
 
-Junk is left out of the hash: `.git`, `.DS_Store`, `__pycache__`, `*.pyc`, `Thumbs.db`, and the local-state folders `node_modules`, `.venv`, `venv`.
+Junk is left out of the hash, on both sides: `.git`, `.DS_Store`, `__pycache__`, `*.pyc`, `Thumbs.db`, and the local-state folders `node_modules`, `.venv`, `venv`.
+
+The `npx skills` installer also leaves files out when it copies a skill: every `metadata.json`, and folders named `.git`, `__pycache__` and `__pypackages__`; symlinks it copies as the files they point to. So a clean CLI install of an upstream folder that has a `metadata.json` hashes differently from upstream without anyone having edited it. skill-update therefore also computes what the CLI would have left on disk and accepts either: an install identical to upstream or to the CLI's view of it is *current*. When the CLI would not reproduce the folder exactly, an unexplained difference is reported as outdated but not as *edited by you*, because it could just be the omission.
 
 For one lock entry and one installed copy there are three hashes: `installed`, the lock's `skillFolderHash` (what was installed) and `upstream` (the newest). They give the state:
 
 | Condition | State |
 |---|---|
-| `installed == upstream` | current |
+| `installed` equals upstream, or what the CLI installs from upstream | current |
 | `upstream == lock` and `installed != upstream` | current, with a note: you edited it and upstream has not moved |
 | `installed == lock` | outdated (a clean older copy) |
-| otherwise, SKILL.md `name:` matches the entry | outdated and **modified** (edited by hand, or drifted from the lock) |
+| otherwise, SKILL.md `name:` matches the entry | outdated, and **modified** (edited by hand, or drifted from the lock) unless the CLI omits files from this skill |
 | otherwise | unrelated: same folder name, different skill. Left alone. |
 
-The lock file alone is not trusted. It is common for it and the files on disk to disagree, so the answer comes from the files.
+The lock file alone is not trusted. It is common for it and the files on disk to disagree, so the answer comes from the files. The lock file is found the way the CLI finds it: `$XDG_STATE_HOME/skills/.skill-lock.json` when that variable is set, otherwise `~/.agents/.skill-lock.json`. An entry without a path inside the repository is reported as unknown (it would otherwise mean the whole repository), and a folder that is a git clone is left to the git channel whatever the lock says.
 
 ### One folder name, several lock entries
 
@@ -68,11 +70,14 @@ Names, notes and messages that come from upstream repositories or skill folders 
 
 For a lock-managed folder:
 
+0. Hash the installed folder again. If it is no longer what the check saw (it was edited, or another tool updated it, while the plan was on screen), skip it.
 1. Copy the upstream folder out of the cache into a staging folder.
 2. Check that the staged folder hashes to the upstream hash.
 3. Move the installed folder into `~/.skill-update/backups/<run>/dirs/` and move the staged folder into its place.
 4. Hash the installed folder again. If it differs, move the backup back (complete, `node_modules` included) and report the failure. Only after it passes, move `node_modules` / virtualenvs from the old folder into the new one. A symlink anywhere on that path inside the new folder stops the move, so a hostile upstream cannot aim it elsewhere.
-5. After every copy of a skill succeeded, write the new hash into the lock entry (re-read and written atomically, with a backup of the lock file). Only lock format version 3 is ever written.
+5. After every copy of a skill succeeded, write the new hash into the lock entry (re-read and written atomically through a symlink if the file is one, with a full copy of the file kept). The keys and fields this run changed, with their old and new values, go into the run manifest. Only lock format version 3 is ever written.
+
+Folders only ever move with `rename(2)`, which is atomic: a crash leaves the old folder or the new one, never half of each, and nothing is deleted while it is the only copy. That needs the skill folder, the staging area and the backups on one disk; a skill on another disk is skipped with an explanation instead of being copied. Names that come from lock files are never used as path components (only a sanitized form is).
 
 A skill updating itself is always processed last, so the running tool is not replaced while other work is pending.
 
@@ -82,7 +87,13 @@ For plugins: `claude plugin marketplace update`, then `claude plugin update <nam
 
 ## Backups and rollback
 
-Each run writes `~/.skill-update/backups/<UTC timestamp>/manifest.json` (before it moves anything, and after each step) listing every directory moved, file copied and git repository advanced. `rollback` replays it in reverse. The folder a rollback replaces is itself moved aside, so a rollback can be undone by hand. The last 10 runs are kept. `--no-backup` deletes replaced folders once the new ones are verified.
+Each run writes `~/.skill-update/backups/<UTC timestamp>/manifest.json` (before it moves anything, and after each step) listing every directory moved, git repository advanced and lock record changed. `rollback` replays it in reverse:
+
+- a folder: the current folder is set aside and the backup moves back (a run that stopped between its two moves is finished too);
+- a git clone: edits made since the update are stashed first, then the clone returns to its old commit and your saved edits are re-applied;
+- the lock file: only the entries this run changed are put back, and only if they still hold the values the run wrote, so a skill added or removed since is never clobbered.
+
+The last 10 runs are kept. `--no-backup` deletes replaced folders only after the whole run succeeded (an error or an interruption keeps every backup) and is refused while any skill has local edits.
 
 A lock file (`~/.skill-update/run.lock`, `flock`) keeps two runs from changing things at once.
 
@@ -140,3 +151,6 @@ Exit codes: `0` success; `1` when `check --exit-code` finds updates or an `updat
 - Project-level skills (`./.claude/skills` inside a repository) are out of scope; pass `--root` to include one.
 - Windows is untested.
 - Lock file versions other than 3 are read but never written.
+- When two lock entries match one folder equally well (the same content published at two paths), the one that sorts first wins and the other is not listed.
+- A lock entry that cannot be resolved (offline, unsupported source) does not compete for a folder, so a resolvable entry with the same folder name can take it.
+- git older than 2.30 is not supported; the sparse checkout is done by writing the pattern file directly so that 2.30 to 2.34 work, but only recent versions are tested.

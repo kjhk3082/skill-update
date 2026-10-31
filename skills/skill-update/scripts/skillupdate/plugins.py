@@ -74,8 +74,9 @@ def _age_days(iso: str) -> Optional[int]:
 def refresh(ctx: Ctx) -> None:
     """Ask Claude Code to re-read every marketplace catalog (what it does itself on startup)."""
     binary = claude_bin()
-    if not binary:
+    if not binary or ctx.plugins_refreshed:
         return
+    ctx.plugins_refreshed = True
     r = run_cmd([binary, "plugin", "marketplace", "update"], timeout=900)
     if not r.ok:
         ctx.note("Could not refresh the plugin marketplaces: %s" % first_error(r))
@@ -120,6 +121,7 @@ def apply(ctx: Ctx, run: Run, items: List[Item]) -> List[Result]:
     binary = claude_bin()
     if not binary:
         return [Result(i.name, KIND_PLUGIN, "failed", "the `claude` command was not found") for i in items]
+    refresh(ctx)  # only here, after the user agreed: it writes to Claude Code's own marketplace folders
     before = _installed()
     results: List[Result] = []
     for it in items:

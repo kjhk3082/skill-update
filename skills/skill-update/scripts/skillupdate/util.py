@@ -12,6 +12,10 @@ from typing import Any, Optional, Sequence
 
 # Git must never stop to ask for a password: a private repo should fail fast, not hang.
 _CHILD_ENV = {"GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never", "LC_ALL": "C"}
+# If we are started from inside a git hook or script these point at that repository, and git would then
+# stash or reset the wrong one instead of the skill folder it is run in.
+_REPO_SELECTORS = frozenset({"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+                             "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_PREFIX"})
 
 
 class Proc:
@@ -34,7 +38,7 @@ class Proc:
 
 def run(args: Sequence[str], cwd: Optional[Path] = None, timeout: int = 120, env: Optional[dict] = None) -> Proc:
     """Run a command without a shell. Never raises: failures come back as a non-zero `rc`."""
-    child_env = dict(os.environ)
+    child_env = {k: v for k, v in os.environ.items() if k not in _REPO_SELECTORS}
     child_env.update(_CHILD_ENV)
     if env:
         child_env.update(env)
@@ -114,7 +118,9 @@ def read_json(path: Path) -> Any:
 
 
 def atomic_write(path: Path, text: str) -> None:
-    """Write via a temp file in the same folder so a crash never leaves a half-written file."""
+    """Write via a temp file in the same folder so a crash never leaves a half-written file.
+    A symlinked file (dotfile managers do that) is written through the link, so the link survives."""
+    path = Path(os.path.realpath(path))
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
     try:

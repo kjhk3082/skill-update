@@ -19,6 +19,7 @@ class Ctx:
         self.notes: List[str] = []                  # printed once at the end of a report
         self.lock_path: Optional[Path] = None
         self.lock_writable = False
+        self.plugins_refreshed = False
         self.workers = 8
 
     def note(self, message: str) -> None:

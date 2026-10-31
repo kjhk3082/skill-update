@@ -55,7 +55,7 @@ Skills reach your machine four different ways: `npx skills add`, a `git clone`, 
 | `rollback [run id]` | Restores what an update run replaced. `--list` shows the runs. |
 | `scan` | Shows which skill folders were found. No network. |
 
-Useful flags: `--json` (for agents and scripts), `--dry-run`, `--keep-modified` (leave skills you edited alone), `--only lock|git|plugin`, `--ignore NAME`, `--root DIR` (scan another skills folder), `--no-backup`, `-v`.
+Useful flags: `--json` (for agents and scripts), `--dry-run`, `--keep-modified` (leave skills you edited alone), `--only lock|git|plugin`, `--ignore NAME`, `--root DIR` (scan another skills folder), `--no-backup` (refused while a skill has local edits), `--refresh` (refresh plugin catalogs first), `-v`.
 
 In an agent, the skill drives these for you and asks before changing anything. In a terminal:
 
@@ -76,7 +76,8 @@ python3 skills/skill-update/scripts/skill_update.py update --yes    # unattended
 
 ## Safety
 
-- **Backup first.** Replaced folders go to `~/.skill-update/backups/<run id>/`. The last 10 runs are kept. `rollback` puts them back.
+- **Backup first.** Replaced folders go to `~/.skill-update/backups/<run id>/`. The last 10 runs are kept. `rollback` puts them back, restores only the lock records the run changed, and stashes edits you made since.
+- **Atomic.** Folders only move with `rename`, never copy-and-delete, so an interruption leaves the old folder or the new one. (Your skills and `~/.skill-update` must be on one disk; otherwise that skill is skipped with a hint.)
 - **Verified.** After a replace, the new folder's hash must equal upstream's, otherwise the old one is restored automatically.
 - **Only from the original source.** A skill is updated from the repository it was installed from, never from somewhere new.
 - **No scripts.** `setup`, `install.sh` and friends are reported, never executed. Folders such as `node_modules` and virtualenvs inside a skill are carried over.
@@ -139,6 +140,7 @@ Environment: `SKILL_UPDATE_HOME` (cache and backups, default `~/.skill-update`),
 ## Good to know
 
 - **Unmanaged skills** (copied by hand, or installed by a tool that keeps no record) cannot be updated automatically. If you know where one came from, `npx skills add owner/repo` brings it under management.
+- **Folders the installer trims.** `npx skills add` leaves out `metadata.json` files, so a skill that has one still counts as current when it matches what the installer would have produced.
 - **Plugins** change when Claude Code restarts. Plugins whose catalog publishes no version are handed to `claude plugin update`, which knows whether something newer exists.
 - **Category folders** that hold skills one level deeper (as Hermes does) are not scanned yet.
 - **Windows** is untested; use WSL.

@@ -105,7 +105,7 @@ class GitChannelTests(Sandbox):
         up.commit({"SKILL.md": "---\nname: pack\n---\nv2\n"})
         it = self.item(self.check(), "pack")
         self.assertEqual(it["status"], "blocked")
-        self.assertIn("can run programs", it["notes"][0])
+        self.assertIn("does not trust", it["notes"][0])
         self.cli("update", "--yes")
         self.assertIn("v1", (repo / "SKILL.md").read_text())
         self.assertEqual(list(self.tmp.glob("*.ran")), [])

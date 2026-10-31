@@ -22,7 +22,7 @@ from .context import Ctx
 from .discover import Skill
 from .gitops import GitError, RemoteCache, safe_folder
 from .model import BLOCKED, CURRENT, ERROR, KIND_LOCK, OUTDATED, UNKNOWN, Item, Result
-from .treehash import Manifest, diff, manifest, tree_sha
+from .treehash import Manifest, cli_view, diff, filtered, manifest, tree_sha
 from .util import atomic_write, frontmatter_name, home, now_iso, read_json, sanitize_name, scrub, short
 
 LOCK_VERSION = 3
@@ -36,8 +36,12 @@ class Upstream:
     entry: Dict[str, Any]
     cache: RemoteCache
     folder: str
-    tree: str
-    listing: Manifest
+    tree: str           # git's hash of the folder: what the lock file records
+    kept: Manifest      # its files, minus the junk that is ignored on disk
+    cmp: str            # hash of `kept`: what an installed folder is compared with
+    cli_cmp: str        # hash of what `npx skills add` leaves on disk for this version
+    cli_differs: bool   # the CLI would not reproduce the folder exactly (metadata.json, symlinks), so an
+                        # edit cannot be told apart from what the CLI leaves out
     moved: bool
 
     @property
@@ -46,13 +50,14 @@ class Upstream:
 
 
 def lock_path() -> Optional[Path]:
-    candidates = []
+    """The CLI's own rule: $XDG_STATE_HOME/skills/.skill-lock.json when that is set, else ~/.agents/.skill-lock.json."""
     if os.environ.get("SKILL_UPDATE_LOCK"):
-        candidates.append(Path(os.environ["SKILL_UPDATE_LOCK"]).expanduser())
-    candidates.append(home() / ".agents" / ".skill-lock.json")
-    if os.environ.get("XDG_STATE_HOME"):
-        candidates.append(Path(os.environ["XDG_STATE_HOME"]) / "skills" / ".skill-lock.json")
-    return next((c for c in candidates if c.is_file()), None)
+        candidate = Path(os.environ["SKILL_UPDATE_LOCK"]).expanduser()
+    elif os.environ.get("XDG_STATE_HOME"):
+        candidate = Path(os.environ["XDG_STATE_HOME"]) / "skills" / ".skill-lock.json"
+    else:
+        candidate = home() / ".agents" / ".skill-lock.json"
+    return candidate if candidate.is_file() else None
 
 
 def _supported(entry: Dict[str, Any]) -> bool:
@@ -91,7 +96,11 @@ def _resolve(key: str, entry: Dict[str, Any], cache: Optional[RemoteCache], sync
         item.status = ERROR
         item.notes.append(sync_error)
         return item
-    folder = posixpath.dirname(str(entry.get("skillPath") or "SKILL.md"))
+    skill_path = entry.get("skillPath")
+    if not isinstance(skill_path, str) or not skill_path:
+        item.notes.append("the lock entry records no path inside the repository")
+        return item
+    folder = posixpath.dirname(skill_path)
     if not safe_folder(folder):
         item.notes.append("the lock file holds an unsafe skill path (%r); ignored" % folder)
         return item
@@ -107,7 +116,10 @@ def _resolve(key: str, entry: Dict[str, Any], cache: Optional[RemoteCache], sync
     if submodules:
         item.notes.append("contains git submodules, which skill-update cannot install")
         return item
-    return Upstream(key, entry, cache, folder, tree, listing, moved)
+    kept = filtered(listing)
+    cli, unpredictable = cli_view(kept)
+    return Upstream(key, entry, cache, folder, tree, kept, tree_sha(kept), tree_sha(cli),
+                    unpredictable or len(cli) != len(kept), moved)
 
 
 def _score(up: Upstream, tree: str, m: Manifest) -> float:
@@ -115,10 +127,10 @@ def _score(up: Upstream, tree: str, m: Manifest) -> float:
     score = 0.0
     if tree == up.lock_hash:
         score += 4
-    if tree == up.tree:
+    if tree in (up.cmp, up.cli_cmp):
         score += 3
-    same = sum(1 for p, v in m.items() if up.listing.get(p) == v)
-    score += same / max(1, len(up.listing) + len(m) - same)
+    same = sum(1 for p, v in m.items() if up.kept.get(p) == v)
+    score += same / max(1, len(up.kept) + len(m) - same)
     if sanitize_name(up.key) == up.key:
         score += 0.01  # an entry named exactly like the folder wins an otherwise equal tie
     return score
@@ -141,6 +153,8 @@ def check(ctx: Ctx, skills: List[Skill]) -> List[Item]:
 
     by_dir: Dict[str, List[Skill]] = {}
     for s in skills:
+        if (s.real / ".git").exists():
+            continue  # a git clone is updated with git (stash, fast-forward only), whatever the lock file says
         for e in s.exposures:
             bucket = by_dir.setdefault(sanitize_name(e.path.name), [])
             if s not in bucket:
@@ -242,10 +256,10 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Tuple[Mani
             states.append({"skill": c, "state": "external"})
             continue
         m, t = fingerprints[str(c.real)]
-        if t == up.tree:
-            state, modified = "current", False
+        if t in (up.cmp, up.cli_cmp):
+            state, modified = "current", False   # identical to upstream, or to what the CLI installs from it
         elif up.tree == up.lock_hash:
-            state, modified = "current", True   # upstream has not changed since install: the difference is a local edit
+            state, modified = "current", True    # upstream has not changed since install: the difference is a local edit
         elif t == up.lock_hash:
             state, modified = "outdated", False
         else:
@@ -253,14 +267,16 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Tuple[Mani
             if declared and sanitize_name(declared) != sanitize_name(up.key):
                 state, modified = "unrelated", True
             else:
-                state, modified = "outdated", True
+                # When the CLI leaves files out, an unedited install differs from upstream too, so an
+                # edit cannot be told from the omission: do not claim the user changed anything.
+                state, modified = "outdated", not up.cli_differs
         states.append({"skill": c, "manifest": m, "tree": t, "state": state, "modified": modified})
 
     outdated = [s for s in states if s["state"] == "outdated"]
     if outdated:
         item.status = OUTDATED
         item.modified = any(s["modified"] for s in outdated)
-        item.changes = diff(outdated[0]["manifest"], up.listing)
+        item.changes = diff(outdated[0]["manifest"], up.kept)
     elif any(s["state"] in ("unrelated", "external", "unreadable") for s in states):
         item.status = BLOCKED
     for s in states:
@@ -278,9 +294,10 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Tuple[Mani
     clean = [s for s in states if "tree" in s]
     item.data = {
         "key": up.key, "cache": up.cache, "cache_key": _cache_key(up.entry), "folder": up.folder, "up_tree": up.tree,
-        "moved": up.moved, "copies": states,
+        "up_cmp": up.cmp, "moved": up.moved, "copies": states,
         # the files are fine but the lock record is behind: refresh it so `npx skills check` agrees
-        "heal": item.status == CURRENT and up.lock_hash != up.tree and bool(clean) and all(s["tree"] == up.tree for s in clean),
+        "heal": (item.status == CURRENT and up.lock_hash != up.tree and bool(clean)
+                 and all(s["tree"] in (up.cmp, up.cli_cmp) for s in clean)),
     }
     return item
 
@@ -294,8 +311,13 @@ def apply(ctx: Ctx, run: Run, items: List[Item], heal: List[Item]) -> List[Resul
     for group in sorted(groups.values(), key=lambda g: any(i.name == SELF for i in g)):
         group.sort(key=lambda i: (i.name == SELF, i.name))
         cache: RemoteCache = group[0].data["cache"]
+        folders = sorted({i.data["folder"] for i in group})
         try:
-            cache.materialize(sorted({i.data["folder"] for i in group}))  # one batched download per source
+            try:
+                cache.materialize(folders)  # one batched download per source
+            except GitError:
+                cache.rebuild()             # a killed git can leave a lock behind that makes the cache fail for good
+                cache.materialize(folders)
         except GitError as ex:
             results += [Result(i.name, KIND_LOCK, "failed", "download failed: %s" % ex) for i in group]
             continue
@@ -316,7 +338,7 @@ def _install(run: Run, it: Item, cache: RemoteCache, updates: Dict[str, Dict[str
             continue
         skill: Skill = state["skill"]
         try:
-            _replace(run, skill.real, cache.folder_path(d["folder"]), d["up_tree"], it.name)
+            _replace(run, skill.real, cache.folder_path(d["folder"]), d["up_cmp"], it.name, state["tree"])
             replaced += 1
         except (OSError, shutil.Error, UpdateError) as ex:
             problems.append("%s: %s" % (short(skill.real), scrub(str(ex))))
@@ -332,14 +354,16 @@ def _install(run: Run, it: Item, cache: RemoteCache, updates: Dict[str, Dict[str
     return Result(it.name, KIND_LOCK, "updated", detail)
 
 
-def _replace(run: Run, target: Path, source: Path, expected_tree: str, label: str) -> None:
+def _replace(run: Run, target: Path, source: Path, expected: str, label: str, before: str) -> None:
     """Swap one installed folder for the upstream version, verifying before and after."""
+    if tree_sha(manifest(str(target))) != before:  # edited, or updated by something else, since the check
+        raise UpdateError("the folder changed after it was checked; run skill-update again")
     staged = run.stage_dir(label)
     shutil.copytree(source, staged, symlinks=True, ignore=shutil.ignore_patterns(".git"))
-    if tree_sha(manifest(str(staged))) != expected_tree:
+    if tree_sha(manifest(str(staged))) != expected:
         raise UpdateError("the downloaded files do not match the upstream hash")
     backup = run.swap_dir(target, staged, label)
-    if tree_sha(manifest(str(target))) != expected_tree:
+    if tree_sha(manifest(str(target))) != expected:
         run.revert_swap(target, backup)
         raise UpdateError("the new folder failed verification, so the previous version was restored")
     carry_local_state(backup, target)  # only after verification: a revert must find the old folder complete
@@ -353,10 +377,16 @@ def _write_lock(ctx: Ctx, run: Run, updates: Dict[str, Dict[str, Any]], healed: 
     skills = data.get("skills") if isinstance(data, dict) else None
     if not isinstance(skills, dict):
         return
-    run.backup_file(ctx.lock_path)
+    run.snapshot_file(ctx.lock_path)
+    before: Dict[str, Dict[str, Any]] = {}
+    after: Dict[str, Dict[str, Any]] = {}
     for key, fields in updates.items():
-        if isinstance(skills.get(key), dict):
-            skills[key].update(fields)
+        current = skills.get(key)
+        if isinstance(current, dict):
+            before[key] = {f: current.get(f) for f in fields}  # None where the field did not exist
+            after[key] = dict(fields)
+            current.update(fields)
     atomic_write(ctx.lock_path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    run.record_lock(ctx.lock_path, before, after)
     if healed:
         ctx.note("Refreshed %d stale record%s in the npx skills lock file." % (healed, "" if healed == 1 else "s"))

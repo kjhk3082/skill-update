@@ -88,6 +88,34 @@ def tree_sha(m: Manifest) -> str:
     return _hash_node(root)
 
 
+# What the `npx skills add` installer leaves out when it copies a skill (EXCLUDE_FILES / EXCLUDE_DIRS in
+# its installer), and what it does to symlinks (it copies the file the link points to). A clean install
+# made by the CLI therefore differs from the upstream folder in exactly these ways, without being edited.
+CLI_EXCLUDED_FILES = frozenset({"metadata.json"})
+CLI_EXCLUDED_DIRS = frozenset({".git", "__pycache__", "__pypackages__"})
+
+
+def filtered(listing: Manifest) -> Manifest:
+    """An upstream listing without the junk that is ignored on disk, so both sides are compared like for like."""
+    return {p: v for p, v in listing.items() if not any(_skip(part) for part in p.split("/"))}
+
+
+def cli_view(listing: Manifest) -> Tuple[Manifest, bool]:
+    """What the CLI would leave on disk for an upstream listing, and whether that cannot be predicted exactly
+    (a symlink becomes a copy of its target, whose hash is not in the listing)."""
+    out: Manifest = {}
+    unpredictable = False
+    for path, (mode, sha) in listing.items():
+        parts = path.split("/")
+        if parts[-1] in CLI_EXCLUDED_FILES or any(p in CLI_EXCLUDED_DIRS for p in parts[:-1]):
+            continue
+        if mode == "120000":
+            unpredictable = True
+            continue
+        out[path] = (mode, sha)
+    return out, unpredictable
+
+
 def diff(installed: Manifest, upstream: Manifest) -> Changes:
     """What replacing `installed` with `upstream` would add, overwrite and delete."""
     ch = Changes()
