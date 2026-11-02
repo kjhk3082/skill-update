@@ -24,9 +24,9 @@ class GitTrustTests(Sandbox):
         up, repo = self.pack()
         script, marker = self.marker_script("x")
         for key, value in (("url.http://evil/.insteadOf", "http://good/"), ("protocol.ext.allow", "always"),
-                           ("gpg.program", str(script)), ("core.alternateRefsCommand", str(script)),
-                           ("include.path", str(self.tmp / "extra.cfg")), ("credential.helper", "!" + str(script)),
-                           ("alias.st", "!" + str(script)), ("core.sshCommand", str(script))):
+                           ("gpg.program", script.as_posix()), ("core.alternateRefsCommand", script.as_posix()),
+                           ("include.path", (self.tmp / "extra.cfg").as_posix()), ("credential.helper", "!" + script.as_posix()),
+                           ("alias.st", "!" + script.as_posix()), ("core.sshCommand", script.as_posix())):
             git("config", key, value, cwd=repo)
             it = self.item(self.check(), "pack")
             self.assertEqual(it["status"], "blocked", key)
@@ -39,7 +39,7 @@ class GitTrustTests(Sandbox):
         up, repo = self.pack()
         script, marker = self.marker_script("fsmonitor")
         git("config", "extensions.worktreeConfig", "true", cwd=repo)
-        git("config", "--worktree", "core.fsmonitor", str(script), cwd=repo)
+        git("config", "--worktree", "core.fsmonitor", script.as_posix(), cwd=repo)
         it = self.item(self.check(), "pack")
         self.assertEqual(it["status"], "blocked")
         self.assertIn("core.fsmonitor", it["notes"][0])
@@ -58,7 +58,7 @@ class GitTrustTests(Sandbox):
     def test_a_remote_that_names_a_helper_program_is_never_fetched(self):
         up, repo = self.pack()
         script, marker = self.marker_script("ext")
-        git("remote", "set-url", "origin", "ext::sh -c %s" % script, cwd=repo)
+        git("remote", "set-url", "origin", "ext::sh -c %s" % script.as_posix(), cwd=repo)
         it = self.item(self.check(), "pack")
         self.assertEqual(it["status"], "blocked")
         self.assertIn("not an ordinary", it["notes"][0])

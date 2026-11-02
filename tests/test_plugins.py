@@ -1,14 +1,11 @@
 import json
 import os
-import stat
-import sys
 import unittest
 from unittest import mock
 
 from helpers import Sandbox
 
-FAKE_CLAUDE = """#!%s
-import json, os, sys
+FAKE_CLAUDE = """import json, os, sys
 args = sys.argv[1:]
 open(os.environ["FAKE_CLAUDE_LOG"], "a").write(" ".join(args) + "\\n")
 if args[:3] == ["plugin", "marketplace", "update"]:
@@ -27,7 +24,7 @@ if args[:2] == ["plugin", "update"]:
     print("updated" if new else "already up to date")
     sys.exit(0)
 sys.exit(2)
-""" % sys.executable
+"""
 
 
 class PluginChannelTests(Sandbox):
@@ -57,9 +54,7 @@ class PluginChannelTests(Sandbox):
             "scoped@acme": [{"scope": "project", "version": "9", "installPath": "/x"}]}}))
 
         self.log = self.tmp / "claude.log"
-        fake = self.tmp / "claude"
-        fake.write_text(FAKE_CLAUDE)
-        fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+        fake = self.program("claude", FAKE_CLAUDE)
         env = mock.patch.dict(os.environ, {"SKILL_UPDATE_CLAUDE": str(fake), "FAKE_CLAUDE_LOG": str(self.log)})
         env.start()
         self.addCleanup(env.stop)

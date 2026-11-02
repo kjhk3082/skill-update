@@ -1,5 +1,4 @@
 import json
-import os
 import unittest
 
 from helpers import Sandbox, git
@@ -81,7 +80,7 @@ class GitChannelTests(Sandbox):
         work = self.home / "projects" / "mine"
         git("clone", "-q", up.url, str(work))
         self.claude.mkdir(parents=True)
-        os.symlink(work / "skills" / "linked", self.claude / "linked")
+        self.symlink(work / "skills" / "linked", self.claude / "linked")
         up.commit({"skills/linked/SKILL.md": "---\nname: linked\n---\nnewer\n"})
         head = git("rev-parse", "HEAD", cwd=work)
         it = self.item(self.check(), "linked")
@@ -90,18 +89,11 @@ class GitChannelTests(Sandbox):
         self.cli("update", "--yes")
         self.assertEqual(git("rev-parse", "HEAD", cwd=work), head)
 
-    def marker_script(self, name):
-        marker = self.tmp / (name + ".ran")
-        script = self.tmp / (name + ".sh")
-        script.write_text("#!/bin/sh\ntouch %s\n" % marker)
-        script.chmod(0o755)
-        return script, marker
-
     def test_a_clone_whose_config_can_run_programs_is_left_alone(self):
         up, repo = self.pack()
         for key in ("core.fsmonitor", "core.sshCommand", "credential.helper", "remote.origin.uploadpack"):
             script, marker = self.marker_script(key.replace(".", "-"))
-            git("config", key, str(script), cwd=repo)
+            git("config", key, script.as_posix(), cwd=repo)
         up.commit({"SKILL.md": "---\nname: pack\n---\nv2\n"})
         it = self.item(self.check(), "pack")
         self.assertEqual(it["status"], "blocked")

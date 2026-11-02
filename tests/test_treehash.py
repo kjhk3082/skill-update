@@ -1,4 +1,3 @@
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,7 +18,7 @@ class TreeHashTests(Sandbox):
         (d / "a.txt").write_text("A")
         (d / "a-b").write_text("dash")       # sorts between the folder `a` and the file `a.txt`
         (d / "ünï.md").write_text("unicode name")
-        os.symlink("a.txt", d / "link")
+        self.symlink("a.txt", d / "link")
         (d / "emptydir").mkdir()             # git does not store empty folders
         git("init", "-q", cwd=d)
         git("add", "-A", cwd=d)
