@@ -150,6 +150,18 @@ class LockChannelTests(Sandbox):
         self.assertEqual((self.agents / "dup-x" / "SKILL.md").read_text(), "generic v2\n")
         self.assertEqual((self.claude / "dup-x" / "SKILL.md").read_text(), "claude v2\n")
 
+    def test_a_lock_path_written_with_backslashes_still_names_just_that_folder(self):
+        up, _ = self.setup_skill()
+        entry = self.read_lock()["skills"]["demo"]
+        entry["skillPath"] = "skills\\demo\\SKILL.md"   # lock files written on Windows may look like this
+        self.write_lock({"demo": entry})
+        self.assertEqual(self.item(self.check(), "demo")["status"], "current")
+        up.commit(v2())
+        rc, out, err = self.cli("update", "--yes", "--json")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("v2", (self.agents / "demo" / "SKILL.md").read_text())
+        self.assertFalse((self.agents / "demo" / "skills").exists())   # the whole repository was not put into the skill
+
     def test_node_modules_survive_an_update(self):
         up, _ = self.setup_skill()
         (self.agents / "demo" / "node_modules" / "dep").mkdir(parents=True)

@@ -17,7 +17,7 @@ from .context import Ctx
 from .discover import Skill
 from .gitops import git, safe_remote
 from .model import BLOCKED, CURRENT, ERROR, KIND_GIT, OUTDATED, UNKNOWN, Changes, Item, Result
-from .util import first_error, scrub, short
+from .util import first_error, is_junction, scrub, short
 
 SELF = "skill-update"
 SETUP_FILES = ("setup", "setup.sh", "install.sh", "bootstrap.sh")
@@ -41,7 +41,7 @@ _SAFE_CONFIG = re.compile(
 def _unsafe_reason(repo: Path) -> Optional[str]:
     """Why git should not be run in this folder, or None when it looks like an ordinary clone."""
     dot_git = repo / ".git"
-    if not dot_git.is_dir() or dot_git.is_symlink():
+    if not dot_git.is_dir() or dot_git.is_symlink() or is_junction(dot_git):
         return "its .git is not a plain folder (a worktree, submodule or link)"
     if hasattr(os, "geteuid") and dot_git.stat().st_uid != os.geteuid():
         return "its .git belongs to another user"

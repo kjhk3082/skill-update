@@ -6,7 +6,10 @@
   - Where the file system has no executable bit and line endings were converted to CRLF (Windows by default), folders are compared the way git would hold them, so installed skills are not reported as edited.
   - A second run is refused with a Windows file lock; a folder that a program holds open is retried and then explained; read-only git objects can be removed; paths show a `~` and forward slashes; output is UTF-8; the console is switched to ANSI colors.
 - The repository cache ignores the user's line-ending and long-path settings, so `core.autocrlf=true` no longer makes an update fail its verification. macOS and Linux users with that setting were affected too.
-- `git` and `claude` are looked up on `PATH` only, never in the current folder, where Windows searches first.
+- An unedited older copy is no longer called edited on Windows when a script changed, was removed or flipped its executable bit between two versions.
+- `git` and `claude` are looked up on `PATH` only, never in the current folder, where Windows searches first; a `.cmd` or `.bat` wrapper is refused for git.
+- A `file://` address must name no host and a local path must not start with `//` (git for Windows would read them as a network share). Folder names from a repository are checked against Windows' rules (drive letters, device names, trailing dots). Backslashes in a lock file's `skillPath` read as slashes; before, such a path meant the whole repository.
+- The repository cache ignores `.gitattributes`, so `text`, `eol` and filters cannot rewrite the files it checks out. Files are written with Unix line endings, a byte order mark no longer hides a skill's name, and a link or junction inside a skill is never followed.
 - `desktop.ini` is ignored like `Thumbs.db`.
 - `skill_update.py` is executable in the repository, like the script it is.
 

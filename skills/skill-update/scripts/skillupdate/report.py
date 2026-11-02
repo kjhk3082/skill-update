@@ -5,7 +5,7 @@ import os
 import sys
 from typing import Any, Dict, List, Sequence, Tuple
 
-from . import __version__
+from . import __version__, util
 from .model import (BLOCKED, CURRENT, ERROR, KIND_GIT, KIND_LOCK, KIND_PLUGIN, OUTDATED, STATUS_ORDER,
                     UNKNOWN, UNMANAGED, Item, Result)
 from .util import enable_ansi, short
@@ -123,9 +123,9 @@ def render_check(items: Sequence[Item], folders: int, notes: Sequence[str], elap
             out.append(style("dim", "   list them with --verbose"))
     pending = len(groups[OUTDATED]) + len([i for i in groups[UNKNOWN] if i.kind == KIND_PLUGIN])
     if pending:
-        out += ["", "Apply with:  python3 skill_update.py update    (everything is backed up first)"]
+        out += ["", "Apply with:  %s skill_update.py update    (everything is backed up first)" % util.PYTHON]
     elif not items:
-        out += ["", "No skills found. Skill folders are looked up in the places listed by: python3 skill_update.py scan"]
+        out += ["", "No skills found. Skill folders are looked up in the places listed by: %s skill_update.py scan" % util.PYTHON]
     out += [""] + [style("dim", "note: " + n) for n in notes]
     return "\n".join(out).rstrip() + "\n"
 
@@ -153,7 +153,7 @@ def render_results(results: Sequence[Result], run_id: str, backed_up: bool, note
     n = {o: len([r for r in results if r.outcome == o]) for o in _MARKS}
     out += ["", "%d updated, %d unchanged, %d failed." % (n["updated"], n["unchanged"], n["failed"])]
     if backed_up and n["updated"]:
-        out.append("Undo with:  python3 skill_update.py rollback %s" % run_id)
+        out.append("Undo with:  %s skill_update.py rollback %s" % (util.PYTHON, run_id))
     out += [style("dim", "note: " + x) for x in notes]
     return "\n".join(out) + "\n"
 

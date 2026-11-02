@@ -100,7 +100,7 @@ def _resolve(key: str, entry: Dict[str, Any], cache: Optional[RemoteCache], sync
     if not isinstance(skill_path, str) or not skill_path:
         item.notes.append("the lock entry records no path inside the repository")
         return item
-    folder = posixpath.dirname(skill_path)
+    folder = posixpath.dirname(skill_path.replace("\\", "/"))  # older lock files written on Windows may use backslashes
     if not safe_folder(folder):
         item.notes.append("the lock file holds an unsafe skill path (%r); ignored" % folder)
         return item
@@ -127,7 +127,7 @@ def _score(up: Upstream, installed: Scan) -> float:
     m = installed.view(up.kept)
     tree = tree_sha(m)
     score = 0.0
-    if tree == up.lock_hash:
+    if installed.matches(up.kept, up.lock_hash):
         score += 4
     if tree in (up.cmp, up.cli_cmp):
         score += 3
@@ -254,14 +254,15 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Scan],
         if str(c.real) not in fingerprints:  # a symlink to a folder outside the skill folders
             states.append({"skill": c, "state": "external"})
             continue
-        m = fingerprints[str(c.real)].view(up.kept)  # the folder as git would hold it, judged against this upstream
+        sc = fingerprints[str(c.real)]
+        m = sc.view(up.kept)  # the folder as git would hold it, judged against this upstream
         t = tree_sha(m)
         if t in (up.cmp, up.cli_cmp):
             state, modified = "current", False   # identical to upstream, or to what the CLI installs from it
         elif up.tree == up.lock_hash:
             state, modified = "current", True    # upstream has not changed since install: the difference is a local edit
-        elif t == up.lock_hash:
-            state, modified = "outdated", False
+        elif sc.matches(up.kept, up.lock_hash):
+            state, modified = "outdated", False  # exactly the version that was installed
         else:
             declared = frontmatter_name(c.real / "SKILL.md")
             if declared and sanitize_name(declared) != sanitize_name(up.key):
