@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import time
 from calendar import timegm
 from pathlib import Path
@@ -18,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .backup import Run
 from .context import Ctx
 from .model import BLOCKED, CURRENT, KIND_PLUGIN, OUTDATED, UNKNOWN, Item, Result
-from .util import first_error, home, read_json, run as run_cmd, scrub, short
+from .util import first_error, home, read_json, run as run_cmd, scrub, short, which
 
 STALE_CATALOG_DAYS = 7
 _KEY_OK = re.compile(r"^[\w][\w.@-]*$")  # name@marketplace; must not look like a command line option
@@ -30,7 +29,7 @@ def config_dir() -> Path:
 
 
 def claude_bin() -> Optional[str]:
-    return os.environ.get("SKILL_UPDATE_CLAUDE") or shutil.which("claude")
+    return os.environ.get("SKILL_UPDATE_CLAUDE") or which("claude")
 
 
 def _installed() -> Dict[str, List[Dict[str, Any]]]:

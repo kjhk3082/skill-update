@@ -4,8 +4,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import stat
 import subprocess
+import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -56,6 +60,23 @@ def run(args: Sequence[str], cwd: Optional[Path] = None, timeout: int = 120, env
         return Proc(126, b"", str(ex).encode())
 
 
+def which(name: str) -> Optional[str]:
+    """Find a program on PATH. The current folder is never searched: Windows looks there first for a bare name,
+    and a skill folder we run git in could hold a git.exe of its own."""
+    exts = [""]
+    if os.name == "nt":
+        exts = [e for e in os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(os.pathsep) if e] + [""]
+    for folder in os.environ.get("PATH", "").split(os.pathsep):
+        folder = folder.strip('"')
+        if not folder or not os.path.isabs(folder):  # "" and "." mean the current folder; relative entries are not trusted
+            continue
+        for ext in exts:
+            candidate = os.path.join(folder, name + ext)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+    return None
+
+
 def home() -> Path:
     return Path(os.path.expanduser("~"))
 
@@ -66,12 +87,22 @@ def state_dir() -> Path:
     return Path(env).expanduser() if env else home() / ".skill-update"
 
 
-def short(path: Any) -> str:
-    """Show ~ instead of the home directory, so output is portable and does not leak the user name."""
-    p, h = str(path), str(home())
-    if p == h:
+def _short(p: str, h: str, ps: Any) -> str:
+    """`short` with the path flavour (posixpath or ntpath) passed in, so Windows paths can be tested anywhere."""
+    windows = ps.sep == "\\"
+    key, home_key = ps.normcase(p), ps.normcase(h).rstrip(ps.sep)  # Windows paths ignore case and take either slash
+    if home_key and key == home_key:
         return "~"
-    return "~" + p[len(h):] if p.startswith(h + os.sep) else p
+    if home_key and key.startswith(home_key + ps.sep):
+        rest = p[len(home_key):]
+        return "~" + (rest.replace("\\", "/") if windows else rest)
+    return p.replace("\\", "/") if windows else p
+
+
+def short(path: Any) -> str:
+    """Show ~ instead of the home directory, so output is portable and does not leak the user name.
+    Windows paths are shown with forward slashes, like everywhere else."""
+    return _short(str(path), str(home()), os.path)
 
 
 def sanitize_name(name: str) -> str:
@@ -117,6 +148,41 @@ def read_json(path: Path) -> Any:
         return None
 
 
+def rmtree(path: Any) -> None:
+    """Remove a folder with everything in it, read-only files included (git marks its objects read-only on
+    Windows, which makes shutil.rmtree stop). Whatever still cannot be removed is left behind quietly."""
+    root = os.path.abspath(str(path))
+    if not os.path.lexists(root):
+        return
+
+    def force(func: Any, p: str, _exc: Any) -> None:
+        try:
+            for fix in (p, os.path.dirname(p)):
+                if fix == root or fix.startswith(root + os.sep):  # never change anything outside the tree being removed
+                    os.chmod(fix, stat.S_IRWXU)
+            func(p)
+        except OSError:
+            pass
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(root, onexc=force)
+    else:
+        shutil.rmtree(root, onerror=force)
+
+
+def _replace_file(tmp: str, path: Path) -> None:
+    """os.replace; on Windows it is refused for a moment while another program has the file open, so retry."""
+    for wait in (0.05, 0.1, 0.2, 0.4):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if os.name != "nt":
+                raise
+            time.sleep(wait)
+    os.replace(tmp, path)
+
+
 def atomic_write(path: Path, text: str) -> None:
     """Write via a temp file in the same folder so a crash never leaves a half-written file.
     A symlinked file (dotfile managers do that) is written through the link, so the link survives."""
@@ -130,13 +196,32 @@ def atomic_write(path: Path, text: str) -> None:
             os.chmod(tmp, path.stat().st_mode & 0o777)
         except OSError:
             pass
-        os.replace(tmp, path)
+        _replace_file(tmp, path)
     except BaseException:
         try:
             os.unlink(tmp)
         except OSError:
             pass
         raise
+
+
+def enable_ansi() -> bool:
+    """Make a Windows console understand ANSI escape codes (Windows 10 and later). False where it cannot,
+    so that the escape codes are not printed as text."""
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.windll.kernel32
+        kernel.GetStdHandle.restype = wintypes.HANDLE
+        handle = kernel.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = wintypes.DWORD()
+        if not kernel.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        return bool(mode.value & 0x0004) or bool(kernel.SetConsoleMode(handle, mode.value | 0x0004))
+    except Exception:
+        return False
 
 
 def frontmatter_name(skill_md: Path) -> Optional[str]:

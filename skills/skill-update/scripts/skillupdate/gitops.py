@@ -9,12 +9,11 @@ import hashlib
 import os
 import posixpath
 import re
-import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from .treehash import Manifest
-from .util import Proc, first_error, frontmatter_name, run, state_dir
+from .util import Proc, first_error, frontmatter_name, rmtree, run, state_dir, which
 
 
 class GitError(Exception):
@@ -30,7 +29,8 @@ _HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "
 
 
 def git(*args: str, cwd: Optional[Path] = None, timeout: int = 120) -> Proc:
-    return run(["git", *_HARDEN, *args], cwd=cwd, timeout=timeout)
+    # the program is looked up on PATH only, never in the folder we are run from or run git in
+    return run([which("git") or "git", *_HARDEN, *args], cwd=cwd, timeout=timeout)
 
 
 # Values from lock files and manifests end up on a git command line, so they are checked first:
@@ -63,7 +63,7 @@ def safe_folder(folder: str) -> bool:
 
 
 def git_version() -> Optional[Tuple[int, ...]]:
-    r = run(["git", "--version"], timeout=20)
+    r = run([which("git") or "git", "--version"], timeout=20)
     m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", r.out) if r.ok else None
     return tuple(int(x) for x in m.groups() if x is not None) if m else None
 
@@ -93,12 +93,12 @@ class RemoteCache:
         if (self.dir / ".git" / "config.worktree").exists():
             # a cache made by an earlier version (`git clone --sparse` keeps its sparse settings in a
             # worktree config that overrides ours); it is only a cache, so start it again
-            shutil.rmtree(self.dir, ignore_errors=True)
+            rmtree(self.dir)
         fresh = False
         for attempt in (1, 2):
             if not (self.dir / ".git").exists():
                 self.dir.parent.mkdir(parents=True, exist_ok=True)
-                shutil.rmtree(self.dir, ignore_errors=True)
+                rmtree(self.dir)
                 r = git("clone", "--quiet", "--filter=blob:none", "--depth=1", "--no-checkout",
                         "--", self.url, str(self.dir), timeout=300)
                 if not r.ok:
@@ -113,7 +113,7 @@ class RemoteCache:
                 break
             if attempt == 2:
                 raise GitError(first_error(r))
-            shutil.rmtree(self.dir, ignore_errors=True)  # a damaged cache is cheap to rebuild once
+            rmtree(self.dir)  # a damaged cache is cheap to rebuild once
         rp = git("rev-parse", "--verify", "-q", "refs/su/head^{commit}", cwd=self.dir)
         if not rp.ok:
             raise GitError("the source has no commits")
@@ -176,13 +176,17 @@ class RemoteCache:
         """Limit the working tree to these sparse-checkout patterns and check it out in one batch.
         The pattern file is written directly, which works on every git that has sparse checkout; the
         `sparse-checkout set --cone` command line only exists from git 2.35."""
-        for key, value in (("core.sparseCheckout", "true"), ("core.sparseCheckoutCone", "false")):
+        # The cache must hold upstream's bytes whatever the user's own git settings say: with core.autocrlf=true
+        # (the Windows default) a checkout would turn every line ending into CRLF and fail the verification.
+        wanted = (("core.sparseCheckout", "true"), ("core.sparseCheckoutCone", "false"),
+                  ("core.autocrlf", "false"), ("core.safecrlf", "false"), ("core.longpaths", "true"))
+        for key, value in wanted:
             r = git("config", key, value, cwd=self.dir)
             if not r.ok:
                 raise GitError(first_error(r))
-        for key, want in (("core.sparseCheckout", "true"), ("core.sparseCheckoutCone", "false")):
+        for key, want in wanted:
             if git("config", "--get", key, cwd=self.dir).out.strip() != want:  # another config scope overrides ours
-                raise GitError("the cache has unexpected sparse-checkout settings (%s)" % key)
+                raise GitError("the cache has unexpected settings (%s)" % key)
         info = self.dir / ".git" / "info"
         info.mkdir(parents=True, exist_ok=True)
         (info / "sparse-checkout").write_text("\n".join(patterns) + "\n", encoding="utf-8")
@@ -202,7 +206,7 @@ class RemoteCache:
 
     def rebuild(self) -> str:
         """Throw the cache away and fetch again (a killed git can leave locks that make it fail for good)."""
-        shutil.rmtree(self.dir, ignore_errors=True)
+        rmtree(self.dir)
         self._names = None
         return self.sync()
 

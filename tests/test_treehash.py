@@ -29,7 +29,7 @@ class TreeHashTests(Sandbox):
         d.mkdir()
         (d / "SKILL.md").write_text("x")
         clean = treehash.tree_sha(treehash.manifest(str(d)))
-        for junk in (".DS_Store", "mod.pyc"):
+        for junk in (".DS_Store", "mod.pyc", "Thumbs.db", "desktop.ini"):
             (d / junk).write_text("junk")
         for folder in ("__pycache__", "node_modules", ".venv", "scripts/node_modules"):
             (d / folder).mkdir(parents=True)
