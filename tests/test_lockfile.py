@@ -150,6 +150,21 @@ class LockChannelTests(Sandbox):
         self.assertEqual((self.agents / "dup-x" / "SKILL.md").read_text(), "generic v2\n")
         self.assertEqual((self.claude / "dup-x" / "SKILL.md").read_text(), "claude v2\n")
 
+    def test_a_lock_record_without_a_git_hash_does_not_make_the_install_look_edited(self):
+        # when GitHub's API is unavailable the installer records a SHA-256 of its own instead of a git tree hash
+        up, _ = self.setup_skill()
+        entry = self.read_lock()["skills"]["demo"]
+        entry["skillFolderHash"] = "e4e79c1" + "0" * 57
+        self.write_lock({"demo": entry})
+        up.commit(v2())
+        it = self.item(self.check(), "demo")
+        self.assertEqual((it["status"], it["modified"]), ("outdated", False))   # nothing to compare with: no claim either way
+        self.assertTrue(any("git hash" in n for n in it["notes"]))
+        rc, out, err = self.cli("update", "--yes", "--json")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("v2", (self.agents / "demo" / "SKILL.md").read_text())
+        self.assertEqual(self.read_lock()["skills"]["demo"]["skillFolderHash"], up.tree("skills/demo"))   # now a real git hash
+
     def test_a_lock_path_written_with_backslashes_still_names_just_that_folder(self):
         up, _ = self.setup_skill()
         entry = self.read_lock()["skills"]["demo"]
