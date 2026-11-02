@@ -38,6 +38,11 @@ class PackageTests(unittest.TestCase):
             for target in re.findall(r'(?:src="|\]\()((?!https?:)[^")#]+)', text):
                 self.assertTrue((ROOT / target).exists(), "%s links to missing %s" % (readme, target))
 
+    def test_check_screenshot_shows_the_current_version(self):
+        svg = (ROOT / "assets" / "demo-check.svg").read_text(encoding="utf-8")
+        self.assertIn(">skill-update %s<" % __version__, svg,
+                      "assets/demo-check.svg shows another version: run python3 tools/make_demo.py")
+
     def test_every_known_folder_is_a_skills_folder_under_home(self):
         for agent, template in discover.KNOWN_ROOTS:
             self.assertTrue(template.startswith("~/."), template)
