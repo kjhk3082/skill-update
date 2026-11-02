@@ -136,7 +136,7 @@ def apply(ctx: Ctx, run: Run, items: List[Item]) -> List[Result]:
     results: List[Result] = []
     for it in items:
         key = it.data["key"]
-        if not _KEY_OK.match(key) or str(it.data.get("scope")) not in ("user", "project", "local", "managed"):
+        if not _KEY_OK.fullmatch(key) or str(it.data.get("scope")) not in ("user", "project", "local", "managed"):
             results.append(Result(it.name, KIND_PLUGIN, "failed", "unexpected plugin name or scope; refusing to pass it to claude"))
             continue
         r = run_cmd([binary, "plugin", "update", key, "--scope", str(it.data["scope"])], timeout=600)

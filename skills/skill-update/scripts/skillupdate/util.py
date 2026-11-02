@@ -60,12 +60,20 @@ def run(args: Sequence[str], cwd: Optional[Path] = None, timeout: int = 120, env
         return Proc(126, b"", str(ex).encode())
 
 
-def which(name: str) -> Optional[str]:
+def which(name: str, windows: Optional[bool] = None, scripts: bool = True) -> Optional[str]:
     """Find a program on PATH. The current folder is never searched: Windows looks there first for a bare name,
-    and a skill folder we run git in could hold a git.exe of its own."""
+    and a skill folder we run git in could hold a git.exe of its own.
+
+    On Windows a name without an extension is not a program (PATHEXT decides which extensions are), and with
+    `scripts=False` a .bat or .cmd wrapper is refused: cmd.exe would read special characters in the
+    arguments a second time."""
+    nt = os.name == "nt" if windows is None else windows
     exts = [""]
-    if os.name == "nt":
-        exts = [e for e in os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(os.pathsep) if e] + [""]
+    if nt:
+        known = [e for e in os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";") if e]
+        if not scripts:
+            known = [e for e in known if e.lower() not in (".bat", ".cmd")]
+        exts = [""] if os.path.splitext(name)[1].lower() in [e.lower() for e in known] else known
     for folder in os.environ.get("PATH", "").split(os.pathsep):
         folder = folder.strip('"')
         if not folder or not os.path.isabs(folder):  # "" and "." mean the current folder; relative entries are not trusted
@@ -75,6 +83,21 @@ def which(name: str) -> Optional[str]:
             if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                 return candidate
     return None
+
+
+# Windows has no python3 command (the Store's stub of that name only opens a window), and prints py or python.
+PYTHON = "python" if os.name == "nt" else "python3"
+_MOUNT_POINT = 0xA0000003  # IO_REPARSE_TAG_MOUNT_POINT: what a directory junction is
+
+
+def is_junction(path: Any) -> bool:
+    """A Windows directory junction: a link that is_symlink() does not report."""
+    if os.name != "nt":
+        return False
+    try:
+        return getattr(os.lstat(path), "st_reparse_tag", 0) == _MOUNT_POINT
+    except OSError:
+        return False
 
 
 def home() -> Path:
@@ -158,7 +181,8 @@ def rmtree(path: Any) -> None:
     def force(func: Any, p: str, _exc: Any) -> None:
         try:
             for fix in (p, os.path.dirname(p)):
-                if fix == root or fix.startswith(root + os.sep):  # never change anything outside the tree being removed
+                # never change anything outside the tree being removed, and never through a link
+                if (fix == root or fix.startswith(root + os.sep)) and not stat.S_ISLNK(os.lstat(fix).st_mode):
                     os.chmod(fix, stat.S_IRWXU)
             func(p)
         except OSError:
@@ -190,7 +214,7 @@ def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:  # Windows would write CRLF
             f.write(text)
         try:
             os.chmod(tmp, path.stat().st_mode & 0o777)
@@ -233,7 +257,7 @@ def enable_ansi() -> bool:
 def frontmatter_name(skill_md: Path) -> Optional[str]:
     """The `name:` value from a SKILL.md frontmatter block, or None."""
     try:
-        text = skill_md.read_text(encoding="utf-8", errors="replace")
+        text = skill_md.read_text(encoding="utf-8-sig", errors="replace")  # Notepad saves a byte order mark
     except OSError:
         return None
     if not text.startswith("---"):

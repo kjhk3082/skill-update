@@ -124,6 +124,8 @@ def main():
         print("  status=%s modified=%s changes=%s" % (item["status"], item["modified"], item.get("changes", {}).get("modified")))
         if item["status"] != "outdated":
             fail("the older version is not reported as outdated", json.dumps(item, indent=2))
+        if item["modified"]:   # between the two versions the entry script became executable: that alone is no edit
+            fail("an unedited older install is reported as edited locally", json.dumps(item, indent=2))
         r = m.tool("update", "--yes", "--json")
         result = json.loads(r.stdout)
         print("  update: %s" % [(x["name"], x["outcome"], x["detail"]) for x in result["results"]])

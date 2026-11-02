@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "skills" / "skill-update" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+from skillupdate.util import rmtree  # noqa: E402  (needs the path above)
+
 GIT_ENV = {
     "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com",
     "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
@@ -23,7 +25,7 @@ GIT_ENV = {
 }
 # Anything in the developer's own environment that could change where skill-update looks.
 CLEARED = ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "HERMES_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME",
-           "SKILL_UPDATE_LOCK", "SKILL_UPDATE_CLAUDE", "NO_COLOR"]
+           "SKILL_UPDATE_LOCK", "SKILL_UPDATE_CLAUDE", "SKILL_UPDATE_LENIENT", "NO_COLOR"]
 
 
 def git(*args: str, cwd: Optional[Path] = None) -> str:
@@ -45,7 +47,7 @@ class Upstream:
         git("config", "uploadpack.allowFilter", "true", cwd=self.bare)
         git("config", "uploadpack.allowAnySHA1InWant", "true", cwd=self.bare)
         git("remote", "add", "origin", str(self.bare), cwd=self.work)
-        self.url = "file://" + str(self.bare)
+        self.url = self.bare.as_uri()   # file:///C:/... on Windows: a file URL names no host
 
     def commit(self, files: Dict[str, Any], message: str = "change") -> str:
         """files: path -> text | bytes | (text, mode) | None (delete)."""
@@ -89,7 +91,7 @@ class Sandbox(unittest.TestCase):
         for name in CLEARED:
             os.environ.pop(name, None)
         self.addCleanup(self._env.stop)
-        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.addCleanup(rmtree, self.tmp)   # also removes the read-only files git leaves behind on Windows
         self.agents = self.home / ".agents" / "skills"
         self.claude = self.home / ".claude" / "skills"
 
@@ -129,7 +131,8 @@ class Sandbox(unittest.TestCase):
         """A script that leaves a marker file when run, to prove something was (not) executed."""
         marker = self.tmp / (name + ".ran")
         script = self.tmp / (name + ".sh")
-        script.write_text("#!/bin/sh\ntouch '%s'\n" % marker.as_posix())  # git runs these through sh, on Windows too
+        # bytes, so that Windows does not turn the first line into "#!/bin/sh\r"; git runs these through sh, also there
+        script.write_bytes(("#!/bin/sh\ntouch '%s'\n" % marker.as_posix()).encode())
         script.chmod(0o755)
         return script, marker
 

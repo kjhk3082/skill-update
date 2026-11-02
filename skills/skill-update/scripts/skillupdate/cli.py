@@ -8,7 +8,7 @@ import sys
 import time
 from typing import Any, List, Optional, Sequence
 
-from . import __version__, backup, discover, gitskill, lockfile, plugins, policy, report
+from . import __version__, backup, discover, gitskill, lockfile, plugins, policy, report, util
 from .context import Ctx
 from .gitops import git_version
 from .model import KIND_UNMANAGED, OUTDATED, UNMANAGED, Item
@@ -181,8 +181,8 @@ def cmd_update(args: argparse.Namespace) -> int:
             finished = True
         except BaseException:
             if run.entries:  # something was already replaced: say how to undo it before the error is shown
-                print("skill-update: stopped after changing %d item%s. Undo with: python3 skill_update.py rollback %s"
-                      % (len(run.entries), "" if len(run.entries) == 1 else "s", run.id), file=sys.stderr)
+                print("skill-update: stopped after changing %d item%s. Undo with: %s skill_update.py rollback %s"
+                      % (len(run.entries), "" if len(run.entries) == 1 else "s", util.PYTHON, run.id), file=sys.stderr)
             raise
         finally:
             run.finish(discard=finished)  # an error or interruption keeps every backup, even with --no-backup

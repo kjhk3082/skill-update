@@ -28,43 +28,70 @@ _HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "
            "-c", "merge.verifySignatures=false", "-c", "log.showSignature=false"]
 
 
+def _git_exe() -> Optional[str]:
+    """git as found on PATH. Never a bare `git`: Windows would look in the current folder first and could pick up
+    a git.exe a skill ships. No .cmd or .bat wrapper either, because cmd.exe reads the arguments again."""
+    return which("git", scripts=False)
+
+
 def git(*args: str, cwd: Optional[Path] = None, timeout: int = 120) -> Proc:
-    # the program is looked up on PATH only, never in the folder we are run from or run git in
-    return run([which("git") or "git", *_HARDEN, *args], cwd=cwd, timeout=timeout)
+    exe = _git_exe()
+    if exe is None:
+        return Proc(127, b"", b"git was not found on PATH")
+    return run([exe, *_HARDEN, *args], cwd=cwd, timeout=timeout)
 
 
 # Values from lock files and manifests end up on a git command line, so they are checked first:
 # a URL such as `--upload-pack=...` or `ext::sh -c ...` would otherwise make git run a command.
-_URL_OK = re.compile(r"^(?:https?|ssh|git|file)://\S+$|^[\w.-]+@[A-Za-z0-9][\w.-]*:\S+$")
-_PATH_OK = re.compile(r"^/[\w./@+~-]+$")
-_REF_OK = re.compile(r"^[\w][\w./-]*$")
+#
+# A file URL names no host (file:///...): git for Windows reads file://host/share as the network share
+# //host/share and would connect to it, handing a hostile server the user's credentials. For the same reason
+# a local path does not start with two slashes.
+_URL_OK = re.compile(r"(?:https?|ssh|git)://\S+|file:///\S*|[\w.-]+@[A-Za-z0-9][\w.-]*:\S+")
+_PATH_OK = re.compile(r"/(?!/)[\w./@+~-]+")
+_REF_OK = re.compile(r"[\w][\w./-]*")
+_WINDOWS = os.name == "nt"
+_RESERVED = re.compile(r"(?:con|prn|aux|nul|com[1-9]|lpt[1-9])", re.I)  # device names; also with an extension
 
 
 def safe_url(url: str) -> bool:
-    return bool(_URL_OK.match(url))
+    return bool(_URL_OK.fullmatch(url))
 
 
 def safe_remote(address: str) -> bool:
     """A remote of an existing clone: an ordinary URL, or a local absolute path."""
-    return safe_url(address) or bool(_PATH_OK.match(address))
+    return safe_url(address) or bool(_PATH_OK.fullmatch(address))
 
 
 def safe_ref(ref: Optional[str]) -> bool:
-    return ref is None or bool(_REF_OK.match(ref))
+    return ref is None or bool(_REF_OK.fullmatch(ref))
 
 
-def safe_folder(folder: str) -> bool:
+def _windows_unsafe(folder: str) -> bool:
+    """Names Windows reads as something else: a drive letter or stream (`C:`, `a:b`), a device (`con`, `aux.txt`),
+    or a name with a trailing dot or space, which it silently drops."""
+    if ":" in folder:
+        return True
+    for part in folder.split("/"):
+        if part != part.rstrip(". ") or _RESERVED.fullmatch(part.split(".", 1)[0]):
+            return True
+    return False
+
+
+def safe_folder(folder: str, windows: Optional[bool] = None) -> bool:
     """A folder inside a repository: relative, normalized, never leaving the repository."""
     if folder == "":
         return True
     # also no pattern characters: the folder becomes a line of the sparse-checkout file
-    return (posixpath.normpath(folder) == folder and not folder.startswith(("/", "-", "../"))
-            and folder != ".." and not re.search(r"[\0\n*?\[\]!#\\]", folder) and folder == folder.strip())
+    ok = (posixpath.normpath(folder) == folder and not folder.startswith(("/", "-", "../"))
+          and folder != ".." and not re.search(r"[\0\n*?\[\]!#\\]", folder) and folder == folder.strip())
+    return ok and not ((_WINDOWS if windows is None else windows) and _windows_unsafe(folder))
 
 
 def git_version() -> Optional[Tuple[int, ...]]:
-    r = run([which("git") or "git", "--version"], timeout=20)
-    m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", r.out) if r.ok else None
+    exe = _git_exe()
+    r = run([exe, "--version"], timeout=20) if exe else None
+    m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", r.out) if r is not None and r.ok else None
     return tuple(int(x) for x in m.groups() if x is not None) if m else None
 
 
@@ -155,7 +182,9 @@ class RemoteCache:
         """Every folder in the repository that contains a SKILL.md."""
         r = git("ls-tree", "-r", "--name-only", "-z", self.commit, cwd=self.dir)
         names = [os.fsdecode(n) for n in r.raw.split(b"\0") if n]
-        return sorted({posixpath.dirname(n) for n in names if posixpath.basename(n) == "SKILL.md"})
+        # the names come from the repository, so they are checked before they become part of a path
+        return sorted({posixpath.dirname(n) for n in names
+                       if posixpath.basename(n) == "SKILL.md" and safe_folder(posixpath.dirname(n))})
 
     def skill_names(self) -> Dict[str, Optional[str]]:
         """folder -> `name:` from its SKILL.md, for every skill in the repository (one batched download)."""
@@ -190,6 +219,9 @@ class RemoteCache:
         info = self.dir / ".git" / "info"
         info.mkdir(parents=True, exist_ok=True)
         (info / "sparse-checkout").write_text("\n".join(patterns) + "\n", encoding="utf-8")
+        # no attribute of the repository (text, eol, filters such as LFS, ident, working-tree-encoding) may rewrite
+        # a file: this file outranks the repository's own .gitattributes
+        (info / "attributes").write_text("* -text -eol -filter -ident -working-tree-encoding\n", encoding="utf-8")
         r = git("reset", "--hard", "-q", "refs/su/head", cwd=self.dir, timeout=timeout)
         if not r.ok:
             raise GitError(first_error(r))
