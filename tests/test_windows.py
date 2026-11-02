@@ -166,16 +166,15 @@ class WhichRulesTests(Sandbox):
     def test_on_windows_a_name_without_an_extension_is_not_a_program(self):
         a, b = self.folders()
         self.make(a, "git")                  # a shell script such as the ones Git ships next to git.exe
-        wanted = self.make(b, "git.exe")
+        wanted = self.make(b, "git.EXE")     # spelled as PATHEXT spells it: this file system may tell the cases apart
         with mock.patch.dict(os.environ, {"PATH": os.pathsep.join([str(a), str(b)]), "PATHEXT": ".EXE;.CMD"}):
-            # PATHEXT spells the extension in capitals; the file system ignores the difference
-            self.assertEqual(util.which("git", windows=True).lower(), str(wanted).lower())
+            self.assertEqual(util.which("git", windows=True), str(wanted))
 
     def test_scripts_can_be_refused(self):
         a, _ = self.folders()
-        script = self.make(a, "git.cmd")     # cmd.exe would read special characters in the arguments again
+        script = self.make(a, "git.CMD")     # cmd.exe would read special characters in the arguments again
         with mock.patch.dict(os.environ, {"PATH": str(a), "PATHEXT": ".EXE;.CMD"}):
-            self.assertEqual(util.which("git", windows=True).lower(), str(script).lower())
+            self.assertEqual(util.which("git", windows=True), str(script))
             self.assertIsNone(util.which("git", windows=True, scripts=False))
 
     def test_without_git_on_the_path_nothing_else_is_tried(self):
