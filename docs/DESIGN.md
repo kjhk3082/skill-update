@@ -103,7 +103,7 @@ A lock file (`~/.skill-update/run.lock`, `flock`) keeps two runs from changing t
 - Git clones whose `.git` is not a plain folder owned by the current user, or whose `.git/config` sets something that makes git run a program (`core.fsmonitor`, `core.sshCommand`, `core.hooksPath`, credential helpers, `filter.*`, `remote.*.uploadpack`, `include.*`, …). A skill is data a user installed, not permission to run code whenever a maintenance tool looks at it. Every git command also runs with `core.fsmonitor=false`, `core.hooksPath=/dev/null`, `core.pager=cat`, `core.editor=true` and `diff.external=` switched off, so hooks never run.
 - Diverged clones.
 - Anything with no recorded origin.
-- Scripts shipped by a skill. skill-update never executes anything that comes from an update.
+- Scripts shipped by a skill. skill-update never executes anything that comes from an update. A git clone that ships a setup script (`setup`, `setup.sh`, `install.sh`, `bootstrap.sh`) is also left out of a plain `update` and listed under `skipped`, because its new files may need that script run again; naming the clone updates it.
 
 ## What is not protected
 
@@ -129,9 +129,9 @@ Skill contents are instructions an agent will follow. skill-update checks *where
 }
 ```
 
-`kind` is `lock`, `git`, `plugin` or `unmanaged`. `status` is `outdated`, `current`, `blocked`, `unknown`, `error` or `unmanaged`.
+`kind` is `lock`, `git`, `plugin` or `unmanaged`. `status` is `outdated`, `current`, `blocked`, `unknown`, `error` or `unmanaged`. `setup_script` is present (as `true`) only on a git clone that ships a setup script.
 
-`update --json` returns `results[]` (`name`, `kind`, `outcome` = `updated` | `unchanged` | `failed`, `detail`, `notes`), `skipped[]`, `run_id` (null when nothing was backed up) and `notes`.
+`update --json` returns `results[]` (`name`, `kind`, `outcome` = `updated` | `unchanged` | `failed`, `detail`, `notes`), `skipped[]` (`name`, `reason`), `run_id` (null when nothing was backed up) and `notes`.
 
 Exit codes: `0` success; `1` when `check --exit-code` finds updates or an `update` item failed; `2` for usage errors, a missing `--yes` without a terminal, or a run already in progress; `130` when interrupted.
 
@@ -140,6 +140,8 @@ Exit codes: `0` success; `1` when `check --exit-code` finds updates or an `updat
 **Apply updates ourselves instead of running `npx skills update`.** The official command only knows what it installed, shows no preview, keeps no backup, overwrites silently and needs Node. Reproducing its lock hashes made it cheap to check natively, and replacing a folder is simple enough to do safely. Afterwards the lock record is refreshed, so the two tools agree.
 
 **Edited skills are replaced after a backup by default.** That is what updating means, and the backup makes it recoverable. `--keep-modified` protects edited skills for people who prefer the opposite default. The policy lives in one small function, `policy.select`.
+
+**A clone with a setup script is skipped unless named.** Packs that build or link things in a `setup` step need it run again after an upgrade. Fast-forwarding the files without that step can leave a half-updated pack, and skill-update must not run the script itself. So a plain `update` leaves such a clone alone and says why; `update NAME` is the explicit go-ahead, and its result reminds you to run the script. Same rule as `--keep-modified`: naming a skill overrides a default skip.
 
 **Plugins are delegated.** Claude Code owns plugin state, and half of the plugin catalogs publish no version. We check what can be known and let `claude plugin update` decide the rest.
 

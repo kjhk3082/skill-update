@@ -58,6 +58,7 @@ class Item:
     installed: str = ""
     latest: str = ""
     modified: bool = False
+    setup_script: bool = False  # a git clone that ships a setup script; skill-update never runs it
     changes: Optional[Changes] = None
     commits: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
@@ -81,6 +82,8 @@ class Item:
             "installed": self.installed, "latest": self.latest, "modified": self.modified,
             "notes": self.notes,
         }
+        if self.setup_script:
+            d["setup_script"] = True
         if self.changes is not None:
             d["changes"] = self.changes.to_dict()
         if self.commits:

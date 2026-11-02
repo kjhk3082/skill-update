@@ -134,7 +134,8 @@ def render_plan(chosen: Sequence[Item], skipped: Sequence[Tuple[Item, str]], sty
         out += [style("bold", "Will update %d:" % len(chosen))]
         out += _table(sorted(chosen, key=lambda i: (i.name.lower(), i.kind)), style, notes=True)
     if skipped:
-        out += ([""] if out else []) + [style("dim", "Skipping:")] + [style("dim", "   %s — %s" % (it.name, why)) for it, why in skipped]
+        rows = [it for it, _ in skipped]  # the same name can be installed in two folders
+        out += ([""] if out else []) + [style("dim", "Skipping:")] + [style("dim", "   %s — %s" % (_label(it, rows), why)) for it, why in skipped]
     return "\n".join(out) + "\n" if out else ""
 
 

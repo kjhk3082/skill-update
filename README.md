@@ -51,7 +51,7 @@ Skills reach your machine four different ways: `npx skills add`, a `git clone`, 
 | Command | What it does |
 |---|---|
 | `check` | Lists what has a newer version. Changes nothing. This is the default. |
-| `update [names]` | Updates what is outdated, after a preview and a backup. Pass names, or a source like `owner/repo`, to update only those. |
+| `update [names]` | Updates what is outdated, after a preview and a backup. Pass names, or a source like `owner/repo`, to update only those. A git clone that ships a setup script is skipped unless you name it. |
 | `rollback [run id]` | Restores what an update run replaced. `--list` shows the runs. |
 | `scan` | Shows which skill folders were found. No network. |
 
@@ -80,7 +80,7 @@ python3 skills/skill-update/scripts/skill_update.py update --yes    # unattended
 - **Atomic.** Folders only move with `rename`, never copy-and-delete, so an interruption leaves the old folder or the new one. (Your skills and `~/.skill-update` must be on one disk; otherwise that skill is skipped with a hint.)
 - **Verified.** After a replace, the new folder's hash must equal upstream's, otherwise the old one is restored automatically.
 - **Only from the original source.** A skill is updated from the repository it was installed from, never from somewhere new.
-- **No scripts.** `setup`, `install.sh` and friends are reported, never executed. Folders such as `node_modules` and virtualenvs inside a skill are carried over.
+- **No scripts.** `setup`, `install.sh` and friends are reported, never executed. A git clone that ships one is left out of a plain `update`, because its new files may need that script run again: name it (`update NAME`) to update it, then run the script yourself. Folders such as `node_modules` and virtualenvs inside a skill are carried over.
 - **Your repositories are yours.** Git clones outside the skill folders, symlinks into other projects, and diverged clones are reported and left alone.
 - **Hostile input is refused.** Source URLs, refs and folder names from lock files are validated before they reach `git`. Git clones whose own config could run a program (`core.fsmonitor`, `core.sshCommand`, filters, …) are left alone, hooks never run, and terminal control characters in names and messages are stripped before anything is printed.
 - **No telemetry.** The only network traffic is `git` talking to the sources your skills came from (and `claude` for plugins). Private repositories use your own git credentials.

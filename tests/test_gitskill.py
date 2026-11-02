@@ -138,9 +138,46 @@ class GitChannelTests(Sandbox):
         up.commit({"setup": ("#!/bin/sh\ntouch %s/ran\n" % self.tmp, 0o755), "SKILL.md": "---\nname: pack\n---\nv2\n"})
         it = self.item(self.check(), "pack")
         self.assertTrue(any("setup script" in n for n in it["notes"]))
-        self.cli("update", "--yes")
+        rc, out, err = self.cli("update", "pack", "--yes", "--json")      # named: a plain `update` leaves it alone
+        self.assertEqual(rc, 0, err)
+        data = json.loads(out)
+        self.assertEqual(data["skipped"], [])
+        self.assertEqual(data["results"][0]["outcome"], "updated")
+        self.assertIn("run it yourself", " ".join(data["results"][0]["notes"]))
         self.assertTrue((repo / "setup").exists())
         self.assertFalse((self.tmp / "ran").exists())
+
+    def test_a_plain_update_skips_a_clone_with_a_setup_script_and_updates_the_rest(self):
+        up, repo = self.pack()
+        other = self.upstream("other")
+        other.commit({"SKILL.md": "---\nname: other\n---\nv1\n"})
+        other_repo = self.clone(other, "other")
+        up.commit({"setup": ("#!/bin/sh\ntouch %s/ran\n" % self.tmp, 0o755), "SKILL.md": "---\nname: pack\n---\nv2\n"})
+        other.commit({"SKILL.md": "---\nname: other\n---\nv2\n"})
+        report = self.check()
+        self.assertEqual(self.item(report, "pack")["status"], "outdated")
+        self.assertTrue(self.item(report, "pack")["setup_script"])
+        self.assertNotIn("setup_script", self.item(report, "other"))
+        rc, out, err = self.cli("update", "--yes", "--json")
+        self.assertEqual(rc, 0, err)
+        data = json.loads(out)
+        self.assertEqual([r["name"] for r in data["results"]], ["other"])
+        self.assertEqual([s["name"] for s in data["skipped"]], ["pack"])
+        self.assertIn("setup script", data["skipped"][0]["reason"])
+        self.assertIn("v1", (repo / "SKILL.md").read_text())              # left exactly as it was
+        self.assertIn("v2", (other_repo / "SKILL.md").read_text())        # and the rest is not held back
+        self.assertFalse((self.tmp / "ran").exists())
+
+    def test_a_setup_script_that_is_already_there_counts_too(self):
+        up = self.upstream()
+        up.commit({"SKILL.md": "---\nname: pack\n---\nv1\n", "install.sh": ("#!/bin/sh\n", 0o755)})
+        repo = self.clone(up)
+        up.commit({"SKILL.md": "---\nname: pack\n---\nv2\n"})             # the new commit does not touch the script
+        self.assertTrue(self.item(self.check(), "pack")["setup_script"])
+        rc, out, err = self.cli("update", "--yes", "--json")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual([s["name"] for s in json.loads(out)["skipped"]], ["pack"])
+        self.assertIn("v1", (repo / "SKILL.md").read_text())
 
     def test_rollback_returns_to_the_old_commit_and_gives_the_edits_back(self):
         up, repo = self.pack()

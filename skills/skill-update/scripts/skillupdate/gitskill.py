@@ -134,7 +134,8 @@ def _check_repo(ctx: Ctx, s: Skill) -> Optional[Item]:
     item.changes = _changes(repo)
     incoming = set(item.changes.added) | set(item.changes.modified)
     if any((repo / f).is_file() or f in incoming for f in SETUP_FILES):
-        item.notes.append("has a setup script; skill-update never runs it")
+        item.setup_script = True
+        item.notes.append("has a setup script; skill-update never runs it, and a plain `update` skips it (name it to update it)")
     return item
 
 

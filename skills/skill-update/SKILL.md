@@ -14,11 +14,12 @@ Run it as `python3 "<this skill's folder>/scripts/skill_update.py" ...`. The fol
 1. **Check** (changes nothing): `check --json`. A cold first run can take up to a minute.
 2. **Summarize** for the user, in their language. Count what is outdated and list each outdated item with its name, source and size of change (`changes`). Call out separately:
    - `modified: true`: the user edited that skill, and an update overwrites the edits after a backup.
+   - `setup_script: true`: a git clone with a setup script. A plain `update` leaves it out (see `skipped[]`). Offer to update it by name, and tell the user to run its setup script themselves.
    - `blocked`, `error`, `unknown`: say why, using `notes`. Do not retry in a loop.
    - `unmanaged`: only a count; these have no upstream to compare with.
 3. **Ask** which to update (default: all outdated). Do not run `update` until the user agrees.
-4. **Update**: `update --yes [names...]`. Add `--keep-modified` when the user wants their edits protected. Use `--dry-run` first when they want a preview.
-5. **Report** `results` (updated, unchanged, failed), plus the `run_id` and how to undo it: `rollback <run_id>`. Relay `notes`: plugin changes need a restart, and new skill versions load in a new session.
+4. **Update**: `update --yes [names...]`. Add `--keep-modified` when the user wants their edits protected. Use `--dry-run` first when they want a preview. Naming a skill is the only way to update a `setup_script` clone.
+5. **Report** `results` (updated, unchanged, failed) and `skipped[]` with each reason, plus the `run_id` and how to undo it: `rollback <run_id>`. Relay `notes`: plugin changes need a restart, and new skill versions load in a new session.
 
 ## Rules
 
@@ -40,5 +41,5 @@ Limit a run with `--only lock|git|plugin`, leave a skill out with `--ignore NAME
 
 ## JSON fields
 
-`items[]`: `name`, `kind` (lock, git, plugin, unmanaged), `status` (outdated, current, blocked, unknown, error, unmanaged), `source`, `agents`, `locations`, `modified`, `changes` (`added`, `modified`, `removed`, `files`), `notes`.
-`update` returns `results[]` (`outcome`: updated, unchanged, failed), `skipped[]`, `run_id` and `notes`.
+`items[]`: `name`, `kind` (lock, git, plugin, unmanaged), `status` (outdated, current, blocked, unknown, error, unmanaged), `source`, `agents`, `locations`, `modified`, `setup_script` (only when true), `changes` (`added`, `modified`, `removed`, `files`), `notes`.
+`update` returns `results[]` (`outcome`: updated, unchanged, failed), `skipped[]` (`name`, `reason`), `run_id` and `notes`.

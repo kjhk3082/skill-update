@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A git clone that ships a setup script (`setup`, `setup.sh`, `install.sh` or `bootstrap.sh`) is now left out of a plain `update` and listed under `skipped` with the reason, because its new files may need that script run again. Name it (`update NAME`) to update it. The script is still never run. `check --json` marks such clones with `setup_script: true`.
+
 ## 0.1.0
 
 First release.

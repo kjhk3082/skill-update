@@ -4,6 +4,7 @@ This is the one place that encodes the update policy. Everything else just carri
 """
 from __future__ import annotations
 
+import shlex
 from typing import Any, List, Sequence, Tuple
 
 from .model import KIND_PLUGIN, OUTDATED, UNKNOWN, Item
@@ -20,6 +21,8 @@ def select(items: Sequence[Item], opts: Any) -> Tuple[List[Item], List[Tuple[Ite
     - Outdated skills are updated. A skill whose files differ from what was installed (edited by
       hand, or drifted) is overwritten after a backup, unless --keep-modified is given and the skill
       was not named explicitly.
+    - A git clone that ships a setup script is left out of a plain run, because new files may need
+      that script run again and skill-update never runs it. Naming it on the command line updates it.
     - Plugins whose catalog does not publish a version are handed to Claude Code, which knows
       whether a newer one exists.
     """
@@ -31,7 +34,10 @@ def select(items: Sequence[Item], opts: Any) -> Tuple[List[Item], List[Tuple[Ite
         if names and not explicit:
             continue
         if it.status == OUTDATED:
-            if it.modified and opts.keep_modified and not explicit:
+            if it.setup_script and not explicit:
+                skipped.append((it, "has a setup script; to update it run `update %s`, then run its setup yourself"
+                                    % shlex.quote(it.name)))
+            elif it.modified and opts.keep_modified and not explicit:
                 skipped.append((it, "changed locally; kept because of --keep-modified"))
             else:
                 chosen.append(it)
