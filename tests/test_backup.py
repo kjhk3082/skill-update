@@ -23,7 +23,7 @@ class BackupSafetyTests(Sandbox):
 
     def replace(self, run, target, source, label="skill"):
         """lockfile._replace the way an update calls it: expected = hash of the new folder, before = hash of the old."""
-        lockfile._replace(run, target, source, tree_of(source), label, tree_of(target))
+        lockfile._replace(run, target, source, tree_of(source), label, tree_of(target), treehash.manifest(str(source)))
 
     def test_failed_verification_restores_the_old_folder_complete_with_node_modules(self):
         target = self.folder("skill", {"SKILL.md": "old", "node_modules/dep/index.js": "dep"})
@@ -33,7 +33,7 @@ class BackupSafetyTests(Sandbox):
         # hash calls: the check before the swap, the staged copy, then the installed folder (made to disagree)
         with mock.patch.object(lockfile, "tree_sha", side_effect=["whatever-the-caller-passed", good, "not-the-hash"]):
             with self.assertRaises(backup.UpdateError):
-                lockfile._replace(run, target, source, good, "skill", "whatever-the-caller-passed")
+                lockfile._replace(run, target, source, good, "skill", "whatever-the-caller-passed", treehash.manifest(str(source)))
         self.assertEqual((target / "SKILL.md").read_text(), "old")
         self.assertEqual((target / "node_modules" / "dep" / "index.js").read_text(), "dep")
         rejected = list((run.dir / "rolled-back").glob("*"))
@@ -46,7 +46,7 @@ class BackupSafetyTests(Sandbox):
         before = tree_of(target)
         (target / "SKILL.md").write_text("edited while the plan was on screen")
         with self.assertRaises(backup.UpdateError):
-            lockfile._replace(backup.Run(), target, source, tree_of(source), "skill", before)
+            lockfile._replace(backup.Run(), target, source, tree_of(source), "skill", before, treehash.manifest(str(source)))
         self.assertEqual((target / "SKILL.md").read_text(), "edited while the plan was on screen")
 
     def test_rollback_gives_node_modules_back_to_the_old_folder(self):
