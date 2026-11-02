@@ -213,9 +213,15 @@ def enable_ansi() -> bool:
     try:
         import ctypes
         from ctypes import wintypes
-        kernel = ctypes.windll.kernel32
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        # declared types: a handle is pointer-sized, and ctypes would otherwise pass it as a 32-bit int
+        kernel.GetStdHandle.argtypes = [wintypes.DWORD]
         kernel.GetStdHandle.restype = wintypes.HANDLE
-        handle = kernel.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        kernel.GetConsoleMode.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel.GetConsoleMode.restype = wintypes.BOOL
+        kernel.SetConsoleMode.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel.SetConsoleMode.restype = wintypes.BOOL
+        handle = kernel.GetStdHandle(wintypes.DWORD(-11 & 0xFFFFFFFF))  # STD_OUTPUT_HANDLE
         mode = wintypes.DWORD()
         if not kernel.GetConsoleMode(handle, ctypes.byref(mode)):
             return False
