@@ -95,7 +95,20 @@ Each run writes `~/.skill-update/backups/<UTC timestamp>/manifest.json` (before 
 
 The last 10 runs are kept. `--no-backup` deletes replaced folders only after the whole run succeeded (an error or an interruption keeps every backup) and is refused while any skill has local edits.
 
-A lock file (`~/.skill-update/run.lock`, `flock`) keeps two runs from changing things at once.
+A lock file (`~/.skill-update/run.lock`, `flock`, or `msvcrt.locking` on Windows) keeps two runs from changing things at once.
+
+## Windows
+
+Everything runs natively on Windows 10 and later (Git for Windows, Python 3.9+); under WSL it is simply Linux. What differs, and how it is handled:
+
+- **Folders are compared leniently.** NTFS has no executable bit, and git for Windows usually checks files out with CRLF line endings (`core.autocrlf=true`), which `npx skills` inherits because it clones with the user's own git settings. A strict tree hash would call every skill edited. So there (`SKILL_UPDATE_LENIENT=1` or `0` forces it on any platform) a folder is viewed the way git would hold it, judged against the upstream listing it should match (`treehash.Scan.view`): a file equal to upstream's once CRLF is undone counts as that file with the mode git recorded; a changed or new file is plain. The check, the owner scoring and the three verifications around a replace all use the same view, so an update is verified exactly like a check.
+- **The repository cache is byte-exact.** It pins `core.autocrlf=false`, `core.safecrlf=false` and `core.longpaths=true` in its own config, so no user setting can turn upstream's files into CRLF. A user's *own clones* keep their settings: overriding them would make every file look modified.
+- **Folder swaps wait for programs.** Windows refuses to rename a folder while a program has a file in it open (an editor, a terminal, a virus scanner). `rename` is retried for a few seconds, then the failure is explained. Read-only files (git marks its objects read-only) are cleared before a folder is removed.
+- **Paths** are shown with `~` and forward slashes and compared without regard to case. **Output is UTF-8**, because piped output otherwise uses the ANSI code page and garbles names and JSON, and the console is switched to ANSI colors or stays plain.
+- **Programs are looked up on `PATH` only.** Windows searches the current folder first for a bare `git`, and a skill folder could ship a `git.exe`.
+- **Junctions**, which `npx skills` uses to link an agent's folder to the shared copy without needing special rights, resolve like symlinks.
+
+Limits there: when an upstream script's executable bit changes between two versions, an unedited older copy can be reported as edited (the lock hash belongs to the old tree, while modes are borrowed from the new one). The only consequence is the "edited locally" label, since every replace is backed up. The ANSI switch-on for the legacy console cannot be exercised in CI.
 
 ## What is left alone on purpose
 
@@ -151,7 +164,6 @@ Exit codes: `0` success; `1` when `check --exit-code` finds updates or an `updat
 
 - Category folders that nest skills one level deeper (Hermes) are not scanned.
 - Project-level skills (`./.claude/skills` inside a repository) are out of scope; pass `--root` to include one.
-- Windows is untested.
 - Lock file versions other than 3 are read but never written.
 - When two lock entries match one folder equally well (the same content published at two paths), the one that sorts first wins and the other is not listed.
 - A lock entry that cannot be resolved (offline, unsupported source) does not compete for a folder, so a resolvable entry with the same folder name can take it.

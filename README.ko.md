@@ -93,7 +93,7 @@ python3 skills/skill-update/scripts/skill_update.py update --yes    # 묻지 않
 npx skills add kjhk3082/skill-update -g
 ```
 
-`git` 2.30 이상과 Python 3.9 이상이 필요합니다. Node는 `npx`에만 필요합니다.
+macOS, Linux, Windows 10 이상에서 `git` 2.30 이상과 Python 3.9 이상이 필요합니다. Node는 `npx`에만 필요합니다. 이 문서의 `python3`는 윈도우에서 `python`(또는 `py -3`)으로 바꿔 쓰세요.
 
 <details>
 <summary><b>Claude Code 플러그인으로 설치</b></summary>
@@ -144,7 +144,7 @@ cp -R skill-update/skills/skill-update ~/.claude/skills/      # Codex 등은 ~/.
 - **되돌리기는 스킬만 대상입니다.** 플러그인 갱신은 Claude Code 소관이라, 되돌리려면 그쪽 명령을 쓰세요.
 - **플러그인** 중 마켓이 더는 올리지 않는 것은 갱신을 시도하지 않고 "확인 필요"로 알립니다(이름이 바뀐 경우 새 이름도 알려 줍니다). 플러그인 변경은 Claude Code를 다시 시작해야 적용됩니다. 카탈로그가 버전을 공개하지 않는 플러그인은 `claude plugin update`가 새 버전이 있는지 판단합니다.
 - **카테고리 폴더**(Hermes처럼 스킬이 한 단계 더 깊이 있는 구조)는 아직 훑지 않습니다.
-- **윈도우**는 검증하지 못했습니다. WSL을 쓰세요.
+- **윈도우**에서도 그대로 동작합니다. CI가 윈도우에서 시험과 진짜 `npx skills` 설치를 돌립니다. 윈도우에서는 설치기가 CRLF 줄바꿈으로 깔고 실행 권한 비트가 없으므로, 그것만 빼고 원본과 같으면 직접 고치지 않은 폴더로 봅니다. 편집기나 백신이 스킬 안의 파일을 열어 두고 있으면 폴더 교체를 다시 시도한 뒤 이유를 알려 줍니다. 자세한 내용은 [docs/DESIGN.md](docs/DESIGN.md#windows)를 보세요.
 - **잠금 파일**은 형식 버전 3만 씁니다. 다른 버전은 읽기만 하고 고치지 않습니다.
 - **스킬 내용은 검토하지 않습니다.** 업데이트는 원본 저장소의 현재 내용을 그대로 가져옵니다. 무엇이 바뀌는지는 미리보기가 알려 주고, 읽어 보는 것은 사용자의 몫입니다.
 
@@ -153,6 +153,7 @@ cp -R skill-update/skills/skill-update ~/.claude/skills/      # Codex 등은 ~/.
 ```bash
 python3 -m unittest discover -s tests -v     # 모든 시험은 자기만의 HOME과 로컬 git 저장소에서 돌아갑니다
 python3 tools/make_demo.py                   # assets/의 화면 이미지를 다시 만듭니다
+python3 tools/e2e_npx_skills.py              # 진짜 `npx skills`로 임시 홈에 설치해 봅니다 (Node와 네트워크 필요)
 ```
 
 동작 원리는 [docs/DESIGN.md](docs/DESIGN.md), 기여 방법은 [CONTRIBUTING.md](CONTRIBUTING.md)를 보세요.

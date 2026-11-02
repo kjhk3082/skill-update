@@ -7,7 +7,7 @@ description: Use when the user wants to check whether installed agent skills are
 
 Finds every skill installed on this machine, works out where each one came from, compares it with its upstream and updates what is outdated, with a backup first. The engine is `scripts/skill_update.py` (Python 3.9+, standard library; the network is only touched through `git`).
 
-Run it as `python3 "<this skill's folder>/scripts/skill_update.py" ...`. The folder is the "Base directory" shown when this skill loads.
+Run it as `python3 "<this skill's folder>/scripts/skill_update.py" ...`. The folder is the "Base directory" shown when this skill loads. On Windows use `python` (or `py -3`) instead of `python3`, and write the folder with forward slashes (`C:/Users/me/.claude/skills/skill-update`) so that Git Bash keeps the path intact.
 
 ## Workflow
 

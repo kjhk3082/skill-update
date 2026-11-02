@@ -93,7 +93,7 @@ Local edits: a skill you edited by hand is replaced after a backup by default, a
 npx skills add kjhk3082/skill-update -g
 ```
 
-Requires `git` 2.30+ and Python 3.9+. Node is only needed for `npx`.
+Requires `git` 2.30+ and Python 3.9+, on macOS, Linux or Windows 10+. Node is only needed for `npx`. Where this page says `python3`, Windows uses `python` (or `py -3`).
 
 <details>
 <summary><b>Claude Code plugin</b></summary>
@@ -144,7 +144,7 @@ Environment: `SKILL_UPDATE_HOME` (cache and backups, default `~/.skill-update`),
 - **Rollback covers skills, not plugins.** Plugin updates are Claude Code's own; undo one with its commands.
 - **Plugins** that their marketplace no longer lists are reported as needing attention (with the new name when it was renamed) rather than attempted. Plugin changes apply when Claude Code restarts. Plugins whose catalog publishes no version are handed to `claude plugin update`, which knows whether something newer exists.
 - **Category folders** that hold skills one level deeper (as Hermes does) are not scanned yet.
-- **Windows** is untested; use WSL.
+- **Windows** works natively; CI runs the tests and a real `npx skills` install there. The installer leaves CRLF line endings and no executable bits on Windows, so a folder counts as unedited when it matches upstream apart from those. When a program (an editor, a virus scanner) holds a file in a skill open, the folder swap is retried and then explained. See [docs/DESIGN.md](docs/DESIGN.md#windows).
 - **Lock file**: only format version 3 is written. Another version is read but never modified.
 - **Skill contents are not reviewed.** An update brings in whatever the upstream repository now contains. The preview tells you what changed; reading it is up to you.
 
@@ -153,6 +153,7 @@ Environment: `SKILL_UPDATE_HOME` (cache and backups, default `~/.skill-update`),
 ```bash
 python3 -m unittest discover -s tests -v     # sandboxed: every test uses its own HOME and local git repositories
 python3 tools/make_demo.py                   # regenerate the screenshots in assets/
+python3 tools/e2e_npx_skills.py              # install with the real `npx skills` into a throw-away home (needs Node and network)
 ```
 
 See [docs/DESIGN.md](docs/DESIGN.md) for how it works and [CONTRIBUTING.md](CONTRIBUTING.md) to help.
