@@ -51,7 +51,9 @@ def build(tmp: Path):
     design = Upstream(tmp, "design-skills")
     office = Upstream(tmp, "office-skills")
     old = Upstream(tmp, "old-skills")
-    packs = {n: Upstream(tmp, n) for n in ("review-pack", "team-pack")}
+    # The packs sit at <tmp>/github.com/acme/<name>.git, so the address git resolves them to reads like the
+    # GitHub repository they stand for: the source label is taken from a github.com/owner/repo path.
+    packs = {n: Upstream(tmp / "github.com" / "acme", n) for n in ("review-pack", "team-pack")}
     design.commit({"skills/%s/SKILL.md" % n: skill(n, "v1") for n in ("frontend-design", "motion-guide", "color-theory")})
     office.commit({"skills/pdf-tools/SKILL.md": skill("pdf-tools", "v1"), "skills/pdf-tools/scripts/convert.py": "print('v1')\n",
                    "skills/docx-tools/SKILL.md": skill("docx-tools", "v1"), "skills/sql-helper/SKILL.md": skill("sql-helper", "v1")})
