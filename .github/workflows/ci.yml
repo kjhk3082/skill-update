@@ -29,3 +29,24 @@ jobs:
           python --version
       - name: Tests
         run: python -m unittest discover -s tests -v
+
+  # The real installer on every platform: what `npx skills` leaves on disk (CRLF line endings and no executable
+  # bits on Windows, junctions) is what the folder comparison has to cope with, and no fake can show that.
+  e2e:
+    name: npx skills install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install with the real installer, then check, update and roll back
+        env:
+          E2E_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          E2E_REF: ${{ github.head_ref || github.ref_name }}
+        run: python tools/e2e_npx_skills.py
