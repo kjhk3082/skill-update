@@ -216,11 +216,15 @@ def cmd_rollback(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        try:
-            sys.stdout.reconfigure(errors="replace")
-        except (OSError, ValueError):
-            pass
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                if os.name == "nt":  # piped output defaults to the ANSI code page there, which garbles names and JSON
+                    stream.reconfigure(encoding="utf-8", errors="replace")
+                else:
+                    stream.reconfigure(errors="replace")
+            except (OSError, ValueError):
+                pass
     args_list = list(sys.argv[1:] if argv is None else argv)
     if not args_list or (args_list[0].startswith("-") and args_list[0] not in ("-h", "--help", "--version")):
         args_list.insert(0, "check")  # `skill_update.py` and `skill_update.py -v` mean `check`

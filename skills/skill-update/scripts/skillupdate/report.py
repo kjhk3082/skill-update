@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 from . import __version__
 from .model import (BLOCKED, CURRENT, ERROR, KIND_GIT, KIND_LOCK, KIND_PLUGIN, OUTDATED, STATUS_ORDER,
                     UNKNOWN, UNMANAGED, Item, Result)
-from .util import short
+from .util import enable_ansi, short
 
 
 class Style:
@@ -25,6 +25,8 @@ class Style:
 def make_style(no_color: bool) -> Style:
     """Color on a terminal; FORCE_COLOR=1 turns it on for pipes (used to render the README screenshots)."""
     wanted = sys.stdout.isatty() or bool(os.environ.get("FORCE_COLOR"))
+    if wanted and os.name == "nt" and sys.stdout.isatty():
+        wanted = enable_ansi()  # an old console would print the escape codes as text
     return Style(wanted and not no_color and "NO_COLOR" not in os.environ)
 
 

@@ -93,6 +93,7 @@ class CliTests(Sandbox):
         backups = list((self.tmp / "state" / "backups").glob("*/dirs/*"))
         self.assertEqual(backups, [])
 
+    @unittest.skipIf(os.name == "nt", "Windows cannot create a file name with control characters in it")
     def test_control_characters_in_names_never_reach_the_terminal(self):
         evil = self.claude / "evil\x1b[2J\x1b]0;pwned\x07name"
         evil.mkdir(parents=True)

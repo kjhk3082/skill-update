@@ -30,7 +30,7 @@ SETUP_FILES = ("setup", "setup.sh", "install.sh", "bootstrap.sh")
 # are accepted in the repository's own config; anything else and the clone is left alone.
 _SAFE_CONFIG = re.compile(
     r"^(core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks"
-    r"|autocrlf|eol|sparsecheckout|sparsecheckoutcone|untrackedcache|trustctime|checkstat)"
+    r"|autocrlf|safecrlf|eol|longpaths|sparsecheckout|sparsecheckoutcone|untrackedcache|trustctime|checkstat)"
     r"|remote\..+\.(url|pushurl|fetch|push|tagopt|promisor|partialclonefilter)"
     r"|branch\..+\.(remote|merge|rebase|pushremote|description)"
     r"|submodule\..+\.(url|active)"

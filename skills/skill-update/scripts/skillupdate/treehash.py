@@ -17,7 +17,7 @@ from .model import Changes
 Manifest = Dict[str, Tuple[str, str]]
 
 # Never part of a skill's source: dropped from hashes.
-_JUNK_NAMES = frozenset({".git", ".DS_Store", "__pycache__", "Thumbs.db"})
+_JUNK_NAMES = frozenset({".git", ".DS_Store", "__pycache__", "Thumbs.db", "desktop.ini"})
 _JUNK_SUFFIXES = (".pyc",)
 # Local state a user may have created inside a skill (npm install, venv). Ignored in hashes
 # and carried over when a skill folder is replaced.

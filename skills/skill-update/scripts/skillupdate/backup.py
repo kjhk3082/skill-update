@@ -22,9 +22,13 @@ from typing import Any, Dict, List, Optional
 
 from .gitops import git
 from .treehash import LOCAL_STATE_DIRS
-from .util import atomic_write, first_error, read_json, short, state_dir
+from .util import atomic_write, first_error, read_json, rmtree, short, state_dir
 
 KEEP_RUNS = 10
+_WINDOWS = os.name == "nt"
+# Windows refuses to rename a folder while a program has a file in it open (an editor, a terminal, a virus
+# scanner). Such a hold is usually brief, so a few retries get past it.
+_MOVE_WAITS = (0.1, 0.25, 0.5, 1.0, 2.0)
 
 
 class UpdateError(Exception):
@@ -37,8 +41,8 @@ def _slug(label: str) -> str:
 
 
 def _inside(base: Path, path: Path) -> bool:
-    b, p = os.path.realpath(base), os.path.realpath(path)
-    return p == b or p.startswith(b + os.sep)
+    b, p = os.path.normcase(os.path.realpath(base)), os.path.normcase(os.path.realpath(path))  # Windows ignores case
+    return p == b or p.startswith(b.rstrip(os.sep) + os.sep)
 
 
 def _device(path: Path) -> int:
@@ -50,13 +54,20 @@ def _device(path: Path) -> int:
 def _move(src: Path, dst: Path) -> None:
     """Rename src to dst. Never falls back to copy-and-delete, which is not atomic."""
     dst.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        os.rename(src, dst)
-    except OSError as ex:
-        if ex.errno == errno.EXDEV:
-            raise UpdateError("%s and %s are on different disks; skill-update only moves folders within one disk. "
-                              "Set SKILL_UPDATE_HOME to a folder on the disk that holds your skills." % (short(src), short(dst))) from ex
-        raise
+    for wait in _MOVE_WAITS + (None,):
+        try:
+            os.rename(src, dst)
+            return
+        except OSError as ex:
+            if ex.errno == errno.EXDEV:
+                raise UpdateError("%s and %s are on different disks; skill-update only moves folders within one disk. "
+                                  "Set SKILL_UPDATE_HOME to a folder on the disk that holds your skills." % (short(src), short(dst))) from ex
+            if not (_WINDOWS and isinstance(ex, PermissionError)):
+                raise
+            if wait is None:
+                raise UpdateError("Windows would not let %s be renamed (a program may have a file in it open: an editor, "
+                                  "a terminal, a virus scanner). Close it and run skill-update again." % short(src)) from ex
+            time.sleep(wait)
 
 
 def _plain_folders_down_to(base: Path, rel: Path) -> bool:
@@ -181,7 +192,7 @@ class Run:
 
     def finish(self, discard: bool = True) -> None:
         """Clean up. `discard=False` (an error or an interruption) keeps every backup, whatever --no-backup says."""
-        shutil.rmtree(self.staging, ignore_errors=True)
+        rmtree(self.staging)
         if discard and not self.keep_backup:  # --no-backup: replaced folders go once everything is verified
             for e in self.entries:
                 if e.get("kind") == "dir" and e.get("state") == "done" and _inside(self.dir, Path(e["backup"])):
@@ -190,7 +201,7 @@ class Run:
             if self.entries:
                 self.save()
         if not self.entries and not _has_files(self.dir / "dirs"):
-            shutil.rmtree(self.dir, ignore_errors=True)
+            rmtree(self.dir)
         _prune()
 
 
@@ -200,7 +211,7 @@ def _has_files(path: Path) -> bool:
 
 def _discard(path: Path) -> None:
     if path.is_dir() and not path.is_symlink():
-        shutil.rmtree(path, ignore_errors=True)
+        rmtree(path)
     else:
         try:
             os.unlink(path)
@@ -214,7 +225,7 @@ def _prune() -> None:
         return
     runs = sorted(p for p in base.iterdir() if p.is_dir())
     for old in runs[:-KEEP_RUNS]:
-        shutil.rmtree(old, ignore_errors=True)
+        rmtree(old)
 
 
 def list_runs() -> List[Dict[str, Any]]:
@@ -331,6 +342,18 @@ def rollback(run_id: Optional[str]) -> List[str]:
     return lines or ["nothing to restore in %s" % wanted]
 
 
+def _lock(fh: Any) -> None:
+    """Take an exclusive lock on the open file without waiting; OSError if another process holds it. The lock
+    goes when the file is closed, or when the process dies."""
+    if _WINDOWS:
+        import msvcrt
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
 class RunLock:
     """Only one skill-update run may change things at a time."""
 
@@ -338,18 +361,18 @@ class RunLock:
         self._fh = None
 
     def __enter__(self) -> "RunLock":
-        try:
-            import fcntl
-        except ImportError:  # no flock on this platform; carry on unprotected
-            return self
         path = state_dir() / "run.lock"
         path.parent.mkdir(parents=True, exist_ok=True)
-        self._fh = open(path, "w")
+        fh = open(path, "a+")
         try:
-            fcntl.flock(self._fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock(fh)
+        except ImportError:  # no file locking on this platform; carry on unprotected
+            fh.close()
+            return self
         except OSError:
-            self._fh.close()
+            fh.close()
             raise UpdateError("another skill-update run is in progress")
+        self._fh = fh
         return self
 
     def __exit__(self, *exc: Any) -> None:
