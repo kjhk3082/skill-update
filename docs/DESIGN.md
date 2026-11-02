@@ -115,7 +115,7 @@ Skill contents are instructions an agent will follow. skill-update checks *where
 
 ```json
 {
-  "tool": "skill-update", "version": "0.1.0", "command": "check", "elapsed_seconds": 6.7,
+  "tool": "skill-update", "version": "0.1.1", "command": "check", "elapsed_seconds": 6.7,
   "skill_folders": [{ "agent": "claude-code", "path": "~/.claude/skills", "skills": 73 }],
   "summary": { "outdated": 3, "blocked": 1, "error": 0, "unknown": 2, "current": 40, "unmanaged": 9, "total": 55 },
   "items": [{

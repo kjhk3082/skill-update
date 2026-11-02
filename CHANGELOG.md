@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
 
 - A git clone that ships a setup script (`setup`, `setup.sh`, `install.sh` or `bootstrap.sh`) is now left out of a plain `update` and listed under `skipped` with the reason, because its new files may need that script run again. Name it (`update NAME`) to update it. The script is still never run. `check --json` marks such clones with `setup_script: true`.
+- The update plan tells skipped copies of one skill apart by folder, and the README screenshots show the current output; a test now keeps the check screenshot in step with the version.
 
 ## 0.1.0
 

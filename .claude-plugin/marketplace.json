@@ -3,14 +3,14 @@
   "owner": { "name": "kjhk3082" },
   "metadata": {
     "description": "Check and update every agent skill on your machine.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "plugins": [
     {
       "name": "skill-update",
       "source": "./",
       "description": "Check and update every agent skill on your machine: npx skills installs, git clones and Claude Code plugins. Backs up before it changes anything.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": { "name": "kjhk3082" },
       "category": "productivity",
       "keywords": ["skills", "agent-skills", "update", "claude-code", "codex", "maintenance"]

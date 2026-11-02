@@ -23,7 +23,7 @@
 <text x="24" y="394" xml:space="preserve"><tspan fill="#7ee787" font-weight="400">✓</tspan><tspan fill="#c9d1d9" font-weight="400"> pdf-tools  </tspan><tspan fill="#6e7681" font-weight="400">1 folder replaced (+0 ~2 -0 files)</tspan></text>
 <text x="24" y="413" xml:space="preserve"></text>
 <text x="24" y="432" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">5 updated, 1 unchanged, 0 failed.</tspan></text>
-<text x="24" y="451" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">Undo with:  python3 skill_update.py rollback 20261102-060924</tspan></text>
+<text x="24" y="451" xml:space="preserve"><tspan fill="#c9d1d9" font-weight="400">Undo with:  python3 skill_update.py rollback 20261102-062838</tspan></text>
 <text x="24" y="470" xml:space="preserve"><tspan fill="#6e7681" font-weight="400">note: Restart Claude Code to load the updated plugins. skill-update&#x27;s rollback does not cover plugin updates.</tspan></text>
 </g>
 </svg>
