@@ -22,7 +22,7 @@ from .context import Ctx
 from .discover import Skill
 from .gitops import GitError, RemoteCache, safe_folder
 from .model import BLOCKED, CURRENT, ERROR, KIND_LOCK, OUTDATED, UNKNOWN, Item, Result
-from .treehash import Manifest, cli_view, diff, filtered, manifest, tree_sha
+from .treehash import Manifest, Scan, cli_view, diff, filtered, scan, tree_sha, view_of
 from .util import atomic_write, frontmatter_name, home, now_iso, read_json, sanitize_name, scrub, short
 
 LOCK_VERSION = 3
@@ -122,8 +122,10 @@ def _resolve(key: str, entry: Dict[str, Any], cache: Optional[RemoteCache], sync
                     unpredictable or len(cli) != len(kept), moved)
 
 
-def _score(up: Upstream, tree: str, m: Manifest) -> float:
+def _score(up: Upstream, installed: Scan) -> float:
     """How strongly an installed folder belongs to this lock entry (used when several entries share a folder name)."""
+    m = installed.view(up.kept)
+    tree = tree_sha(m)
     score = 0.0
     if tree == up.lock_hash:
         score += 4
@@ -195,18 +197,16 @@ def check(ctx: Ctx, skills: List[Skill]) -> List[Item]:
 
     # One installed folder can match several lock entries (a repository may publish the same skill
     # twice, e.g. a Claude-specific and a generic copy). Give each folder to the entry it really came from.
-    fingerprints: Dict[str, Tuple[Manifest, str]] = {}
+    fingerprints: Dict[str, Scan] = {}
     unreadable: Dict[str, str] = {}
     for _key, _entry, copies in work:
         for c in copies:
             real = str(c.real)
             if c.in_root and real not in fingerprints and real not in unreadable:
                 try:
-                    m = manifest(real)
+                    fingerprints[real] = scan(real)
                 except OSError as ex:  # e.g. a file inside the skill that this user may not read
                     unreadable[real] = scrub(str(ex), 120)
-                    continue
-                fingerprints[real] = (m, tree_sha(m))
     claimants: Dict[str, List[str]] = {}
     for key, _entry, copies in work:
         for c in copies:
@@ -215,8 +215,7 @@ def check(ctx: Ctx, skills: List[Skill]) -> List[Item]:
     for real, keys in claimants.items():
         good = [k for k in keys if k in resolved]
         if real in fingerprints and len(good) > 1:
-            m, t = fingerprints[real]
-            owner[real] = max(good, key=lambda k: (_score(resolved[k], t, m), k))
+            owner[real] = max(good, key=lambda k: (_score(resolved[k], fingerprints[real]), k))
         else:
             owner[real] = (good or keys)[0]
 
@@ -237,7 +236,7 @@ def check(ctx: Ctx, skills: List[Skill]) -> List[Item]:
     return items
 
 
-def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Tuple[Manifest, str]],
+def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Scan],
            unreadable: Dict[str, str]) -> Item:
     item = Item(name=up.key, kind=KIND_LOCK, status=CURRENT, source=short(str(up.entry.get("source") or "")),
                 agents=sorted({a for c in copies for a in c.agents}),
@@ -255,7 +254,8 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Tuple[Mani
         if str(c.real) not in fingerprints:  # a symlink to a folder outside the skill folders
             states.append({"skill": c, "state": "external"})
             continue
-        m, t = fingerprints[str(c.real)]
+        m = fingerprints[str(c.real)].view(up.kept)  # the folder as git would hold it, judged against this upstream
+        t = tree_sha(m)
         if t in (up.cmp, up.cli_cmp):
             state, modified = "current", False   # identical to upstream, or to what the CLI installs from it
         elif up.tree == up.lock_hash:
@@ -294,7 +294,7 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Tuple[Mani
     clean = [s for s in states if "tree" in s]
     item.data = {
         "key": up.key, "cache": up.cache, "cache_key": _cache_key(up.entry), "folder": up.folder, "up_tree": up.tree,
-        "up_cmp": up.cmp, "moved": up.moved, "copies": states,
+        "up_cmp": up.cmp, "kept": up.kept, "moved": up.moved, "copies": states,
         # the files are fine but the lock record is behind: refresh it so `npx skills check` agrees
         "heal": (item.status == CURRENT and up.lock_hash != up.tree and bool(clean)
                  and all(s["tree"] in (up.cmp, up.cli_cmp) for s in clean)),
@@ -338,7 +338,7 @@ def _install(run: Run, it: Item, cache: RemoteCache, updates: Dict[str, Dict[str
             continue
         skill: Skill = state["skill"]
         try:
-            _replace(run, skill.real, cache.folder_path(d["folder"]), d["up_cmp"], it.name, state["tree"])
+            _replace(run, skill.real, cache.folder_path(d["folder"]), d["up_cmp"], it.name, state["tree"], d["kept"])
             replaced += 1
         except (OSError, shutil.Error, UpdateError) as ex:
             problems.append("%s: %s" % (short(skill.real), scrub(str(ex))))
@@ -354,16 +354,17 @@ def _install(run: Run, it: Item, cache: RemoteCache, updates: Dict[str, Dict[str
     return Result(it.name, KIND_LOCK, "updated", detail)
 
 
-def _replace(run: Run, target: Path, source: Path, expected: str, label: str, before: str) -> None:
-    """Swap one installed folder for the upstream version, verifying before and after."""
-    if tree_sha(manifest(str(target))) != before:  # edited, or updated by something else, since the check
+def _replace(run: Run, target: Path, source: Path, expected: str, label: str, before: str, reference: Manifest) -> None:
+    """Swap one installed folder for the upstream version, verifying before and after. `reference` is the
+    upstream listing every folder is judged against, the same way as in the check."""
+    if tree_sha(view_of(str(target), reference)) != before:  # edited, or updated by something else, since the check
         raise UpdateError("the folder changed after it was checked; run skill-update again")
     staged = run.stage_dir(label)
     shutil.copytree(source, staged, symlinks=True, ignore=shutil.ignore_patterns(".git"))
-    if tree_sha(manifest(str(staged))) != expected:
+    if tree_sha(view_of(str(staged), reference)) != expected:
         raise UpdateError("the downloaded files do not match the upstream hash")
     backup = run.swap_dir(target, staged, label)
-    if tree_sha(manifest(str(target))) != expected:
+    if tree_sha(view_of(str(target), reference)) != expected:
         run.revert_swap(target, backup)
         raise UpdateError("the new folder failed verification, so the previous version was restored")
     carry_local_state(backup, target)  # only after verification: a revert must find the old folder complete
