@@ -26,6 +26,7 @@ from .treehash import Manifest, Scan, cli_view, diff, filtered, scan, tree_sha, 
 from .util import atomic_write, frontmatter_name, home, now_iso, read_json, sanitize_name, scrub, short
 
 LOCK_VERSION = 3
+_GIT_HASH = re.compile(r"[0-9a-f]{40}")
 SELF = "skill-update"  # updated last, so the running tool is never replaced while other work is pending
 
 
@@ -247,6 +248,7 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Scan],
         item.notes.append("moved upstream to %s/" % up.folder)
 
     states: List[Dict[str, Any]] = []
+    no_hash = False
     for c in copies:
         if str(c.real) in unreadable:
             states.append({"skill": c, "state": "unreadable", "why": unreadable[str(c.real)]})
@@ -267,6 +269,10 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Scan],
             declared = frontmatter_name(c.real / "SKILL.md")
             if declared and sanitize_name(declared) != sanitize_name(up.key):
                 state, modified = "unrelated", True
+            elif not _GIT_HASH.fullmatch(up.lock_hash):
+                # When GitHub's API is unavailable the installer records a SHA-256 of its own here. There is
+                # nothing to compare the folder with, so nobody can say whether it was edited: claim nothing.
+                state, modified, no_hash = "outdated", False, True
             else:
                 # When the CLI leaves files out, an unedited install differs from upstream too, so an
                 # edit cannot be told from the omission: do not claim the user changed anything.
@@ -291,6 +297,9 @@ def _build(up: Upstream, copies: List[Skill], fingerprints: Dict[str, Scan],
                               % (where, frontmatter_name(s["skill"].real / "SKILL.md")))
         elif s["state"] == "current" and s["modified"]:
             item.notes.append("%s has local edits; upstream has not changed" % where)
+    if no_hash and item.status == OUTDATED:
+        item.notes.append("its npx skills lock record holds no git hash, so local edits cannot be told from the update; "
+                          "the replaced folder is backed up")
 
     clean = [s for s in states if "tree" in s]
     item.data = {

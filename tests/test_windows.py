@@ -7,6 +7,7 @@ import json
 import ntpath
 import os
 import posixpath
+import stat
 import unittest
 from unittest import mock
 
@@ -88,14 +89,14 @@ class RmtreeTests(Sandbox):
     def test_a_link_inside_is_never_followed(self):
         outside = self.tmp / "outside.txt"
         outside.write_text("x")
-        outside.chmod(0o644)
+        outside.chmod(0o444)   # read-only: if anything makes the link's target writable, the next check sees it
         root = self.tmp / "tree"
         (root / "ro").mkdir(parents=True)
         self.symlink(outside, root / "ro" / "link")   # the only entry, so it is the first one that cannot be removed
         (root / "ro").chmod(0o555)
         util.rmtree(root)
         self.assertFalse(root.exists())
-        self.assertEqual(outside.stat().st_mode & 0o777, 0o644)   # making things writable stopped at the link
+        self.assertFalse(outside.stat().st_mode & stat.S_IWUSR)   # making things writable stopped at the link
 
 
 class WhichTests(Sandbox):
@@ -139,6 +140,7 @@ class AddressTests(unittest.TestCase):
 
 
 class FolderListingTests(Sandbox):
+    @unittest.skipIf(os.name == "nt", "Windows cannot even create a folder called con; that is the point of the rule")
     def test_skill_folders_leave_out_names_windows_would_misread(self):
         up = self.upstream()
         up.commit({"skills/ok/SKILL.md": "x\n", "skills/con/SKILL.md": "x\n"})
