@@ -1,4 +1,3 @@
-import os
 import unittest
 
 from helpers import Sandbox
@@ -16,7 +15,7 @@ class DiscoverTests(Sandbox):
     def test_finds_skills_in_known_folders_and_merges_symlinks(self):
         real = self.make(self.agents, "alpha")
         self.claude.mkdir(parents=True)
-        os.symlink(real, self.claude / "alpha")
+        self.symlink(real, self.claude / "alpha")
         self.make(self.claude, "beta")
         sc = discover.scan()
         names = {s.name: s for s in sc.skills}
@@ -35,7 +34,7 @@ class DiscoverTests(Sandbox):
     def test_symlink_to_outside_is_not_in_root(self):
         outside = self.make(self.tmp / "elsewhere", "mine")
         self.claude.mkdir(parents=True)
-        os.symlink(outside, self.claude / "mine")
+        self.symlink(outside, self.claude / "mine")
         (skill,) = discover.scan().skills
         self.assertFalse(skill.in_root)
         self.assertIn("outside your skill folders", discover.explain_unmanaged(skill)[0])

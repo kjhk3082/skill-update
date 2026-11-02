@@ -126,7 +126,7 @@ class LockChannelTests(Sandbox):
     def test_symlinked_exposure_is_one_skill_and_follows_the_update(self):
         up, _ = self.setup_skill()
         self.claude.mkdir(parents=True)
-        os.symlink(self.agents / "demo", self.claude / "demo")
+        self.symlink(self.agents / "demo", self.claude / "demo")
         it = self.item(self.check(), "demo")
         self.assertEqual(it["agents"], ["claude-code", "universal"])
         up.commit(v2())
@@ -170,7 +170,8 @@ class LockChannelTests(Sandbox):
         self.cli("update", "--yes")
         self.assertEqual(self.read_lock()["skills"]["demo"]["skillFolderHash"], up.tree("skills/demo"))
 
-    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root can read everything")
+    @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+                     "needs permission bits that root and Windows ignore")
     def test_a_file_that_cannot_be_read_blocks_that_skill_only(self):
         up, _ = self.setup_skill()
         up.commit(v2())

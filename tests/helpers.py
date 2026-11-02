@@ -27,7 +27,8 @@ CLEARED = ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "HERMES_HOME", "XDG_CONFIG_HOME", 
 
 
 def git(*args: str, cwd: Optional[Path] = None) -> str:
-    r = subprocess.run(["git", *args], cwd=cwd, env=dict(os.environ, **GIT_ENV), capture_output=True, text=True)
+    r = subprocess.run(["git", *args], cwd=cwd, env=dict(os.environ, **GIT_ENV), capture_output=True,
+                       encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise RuntimeError("git %s failed: %s" % (" ".join(args), r.stderr))
     return r.stdout.strip()
@@ -48,6 +49,7 @@ class Upstream:
 
     def commit(self, files: Dict[str, Any], message: str = "change") -> str:
         """files: path -> text | bytes | (text, mode) | None (delete)."""
+        executable = []
         for rel, content in files.items():
             p = self.work / rel
             if content is None:
@@ -60,7 +62,11 @@ class Upstream:
             p.write_bytes(content if isinstance(content, bytes) else content.encode())
             if mode:
                 p.chmod(mode)
+                if mode & 0o111:
+                    executable.append(rel)
         git("add", "-A", cwd=self.work)
+        if executable:  # a file system without the executable bit (NTFS) cannot say it, so tell git directly
+            git("update-index", "--chmod=+x", "--", *executable, cwd=self.work)
         git("commit", "-q", "--allow-empty", "-m", message, cwd=self.work)
         git("push", "-q", "origin", "main", cwd=self.work)
         return git("rev-parse", "HEAD", cwd=self.work)
@@ -76,7 +82,8 @@ class Sandbox(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="su-test-")).resolve()
         self.home = self.tmp / "home"
         self.home.mkdir()
-        patch = dict(GIT_ENV, HOME=str(self.home), SKILL_UPDATE_HOME=str(self.tmp / "state"))
+        # Windows takes the home folder from USERPROFILE, not HOME: without it the tool would read the real one
+        patch = dict(GIT_ENV, HOME=str(self.home), USERPROFILE=str(self.home), SKILL_UPDATE_HOME=str(self.tmp / "state"))
         self._env = mock.patch.dict(os.environ, patch)
         self._env.start()
         for name in CLEARED:
@@ -122,15 +129,35 @@ class Sandbox(unittest.TestCase):
         """A script that leaves a marker file when run, to prove something was (not) executed."""
         marker = self.tmp / (name + ".ran")
         script = self.tmp / (name + ".sh")
-        script.write_text("#!/bin/sh\ntouch %s\n" % marker)
+        script.write_text("#!/bin/sh\ntouch '%s'\n" % marker.as_posix())  # git runs these through sh, on Windows too
         script.chmod(0o755)
         return script, marker
+
+    def program(self, name: str, source: str) -> Path:
+        """An executable that runs this Python source: a script with a shebang, or a .cmd file on Windows."""
+        if os.name != "nt":
+            exe = self.tmp / name
+            exe.write_text("#!%s\n%s" % (sys.executable, source), encoding="utf-8")
+            exe.chmod(0o755)
+            return exe
+        script = self.tmp / (name + ".py")
+        script.write_text(source, encoding="utf-8")
+        exe = self.tmp / (name + ".cmd")
+        exe.write_text('@"%s" "%s" %%*\r\n' % (sys.executable, script), encoding="utf-8")
+        return exe
+
+    def symlink(self, target: Any, link: Any) -> None:
+        """os.symlink, or skip the test where this account may not create symlinks (Windows without developer mode)."""
+        try:
+            os.symlink(target, link, target_is_directory=os.path.isdir(target))
+        except (OSError, NotImplementedError) as ex:
+            self.skipTest("cannot create symlinks here: %s" % ex)
 
     # -- running the tool ---------------------------------------------------------------------
 
     def cli(self, *args: str) -> Tuple[int, str, str]:
         r = subprocess.run([sys.executable, str(SCRIPTS / "skill_update.py"), *args],
-                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+                           capture_output=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
         return r.returncode, r.stdout, r.stderr
 
     def check(self, *args: str) -> Dict[str, Any]:
