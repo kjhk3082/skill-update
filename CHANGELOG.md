@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - Runs natively on Windows 10 and later. CI now tests Windows too, and every platform runs a real `npx skills` install, update and rollback (`tools/e2e_npx_skills.py`).
   - Where the file system has no executable bit and line endings were converted to CRLF (Windows by default), folders are compared the way git would hold them, so installed skills are not reported as edited.
